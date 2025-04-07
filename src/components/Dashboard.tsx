@@ -11,9 +11,10 @@ interface DashboardProps {
   businessProfile: BusinessProfile;
   postsCreated: number;
   onStartNewContent: () => void;
+  onViewCalendar: () => void;
 }
 
-const Dashboard = ({ businessProfile, postsCreated, onStartNewContent }: DashboardProps) => {
+const Dashboard = ({ businessProfile, postsCreated, onStartNewContent, onViewCalendar }: DashboardProps) => {
   const [isAssistantExpanded, setIsAssistantExpanded] = useState(true);
 
   const handlePanicMode = () => {
@@ -105,7 +106,11 @@ const Dashboard = ({ businessProfile, postsCreated, onStartNewContent }: Dashboa
                 <div className="text-sm text-gray-500">Publicaciones programadas</div>
                 <div className="text-2xl font-bold">0</div>
               </div>
-              <Button variant="outline" className="w-full mt-2" disabled>
+              <Button 
+                variant="outline" 
+                className="w-full mt-2"
+                onClick={onViewCalendar}
+              >
                 Ver Calendario
               </Button>
             </div>

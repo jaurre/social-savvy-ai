@@ -4,6 +4,7 @@ import Welcome from '@/components/Welcome';
 import BusinessProfileForm, { BusinessProfile } from '@/components/BusinessProfileForm';
 import ContentGenerator from '@/components/ContentGenerator';
 import Dashboard from '@/components/Dashboard';
+import ContentPlanner from '@/components/ContentPlanner';
 import Logo from '@/components/Logo';
 import { Toaster } from "@/components/ui/sonner";
 
@@ -12,6 +13,7 @@ enum AppState {
   PROFILE_SETUP = 'profile_setup',
   DASHBOARD = 'dashboard',
   CONTENT_GENERATOR = 'content_generator',
+  CONTENT_PLANNER = 'content_planner',
 }
 
 const Index = () => {
@@ -31,6 +33,10 @@ const Index = () => {
 
   const handleStartNewContent = () => {
     setAppState(AppState.CONTENT_GENERATOR);
+  };
+
+  const handleViewCalendar = () => {
+    setAppState(AppState.CONTENT_PLANNER);
   };
 
   const handleGenerateContent = () => {
@@ -70,6 +76,16 @@ const Index = () => {
               >
                 Crear Contenido
               </button>
+              <button 
+                onClick={() => setAppState(AppState.CONTENT_PLANNER)}
+                className={`px-4 py-2 rounded-md transition-colors ${
+                  appState === AppState.CONTENT_PLANNER 
+                    ? 'bg-brand-purple/10 text-brand-purple font-medium' 
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Planificador
+              </button>
             </nav>
           )}
           
@@ -101,6 +117,7 @@ const Index = () => {
             businessProfile={businessProfile} 
             postsCreated={postsCreated}
             onStartNewContent={handleStartNewContent}
+            onViewCalendar={handleViewCalendar}
           />
         ) : null;
       case AppState.CONTENT_GENERATOR:
@@ -108,6 +125,14 @@ const Index = () => {
           <ContentGenerator 
             businessProfile={businessProfile}
             postsRemaining={postsRemaining}
+            onGenerateContent={handleGenerateContent}
+          />
+        ) : null;
+      case AppState.CONTENT_PLANNER:
+        return businessProfile ? (
+          <ContentPlanner 
+            businessProfile={businessProfile}
+            postsCreated={postsCreated}
             onGenerateContent={handleGenerateContent}
           />
         ) : null;
