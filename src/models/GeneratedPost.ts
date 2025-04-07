@@ -17,6 +17,7 @@ export interface GeneratedPost {
   canvaEditUrl?: string;
   usedFallback?: boolean;
   fallbackLevel?: number;
+  approach?: string;
 }
 
 // Function to create a canva edit URL (simulated for now)

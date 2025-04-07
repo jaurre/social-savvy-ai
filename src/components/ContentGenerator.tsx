@@ -53,9 +53,35 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
   const [isCanvaDialogOpen, setIsCanvaDialogOpen] = useState(false);
   const [canvaPost, setCanvaPost] = useState<GeneratedPost | null>(null);
 
+  const validateBusinessProfile = (): boolean => {
+    if (!businessProfile.name || !businessProfile.industry || !businessProfile.description || 
+        !businessProfile.tone || !businessProfile.visualStyle || !businessProfile.colorPalette || 
+        businessProfile.colorPalette.length === 0) {
+      toast.error('Perfil de negocio incompleto', {
+        description: 'Por favor completa todos los campos requeridos en tu perfil de negocio antes de generar contenido.'
+      });
+      return false;
+    }
+    return true;
+  };
+
+  const ensureVariability = (textResults: any[]): boolean => {
+    const titles = textResults.map(r => r.title);
+    const uniqueTitles = new Set(titles);
+    
+    const bodies = textResults.map(r => r.body);
+    const uniqueBodies = new Set(bodies);
+    
+    return uniqueTitles.size === textResults.length && uniqueBodies.size === textResults.length;
+  };
+
   const handleGenerateContent = async () => {
     if (!idea) {
       toast.error('Por favor, ingresa una idea para tu publicación');
+      return;
+    }
+
+    if (!validateBusinessProfile()) {
       return;
     }
 
@@ -64,29 +90,60 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
     setProgressStatus('Iniciando generación...');
     
     try {
-      // Generate 3 versions of the content
       const newContent: GeneratedPost[] = [];
+      let textResults = [];
+      
+      setProgressValue(10);
+      setProgressStatus('Generando textos variados...');
+      
+      const approaches = [
+        { focus: 'urgency', description: 'Enfoque de urgencia y escasez' },
+        { focus: 'value', description: 'Enfoque en valor y beneficios' },
+        { focus: 'emotion', description: 'Enfoque emocional o de curiosidad' }
+      ];
       
       for (let i = 0; i < 3; i++) {
-        setProgressValue(i * 30);
-        setProgressStatus(`Generando versión ${i+1}...`);
-        
-        // Step 1: Generate text content
-        setProgressStatus(`Generando texto para versión ${i+1}...`);
         const textResult = await generateText({
           businessProfile,
           idea,
           objective,
-          network
+          network,
+          approach: approaches[i].focus
         });
         
-        // Step 2: Determine if we should include text overlay on the image
+        textResults.push(textResult);
+      }
+      
+      if (!ensureVariability(textResults)) {
+        setProgressStatus('Mejorando variabilidad entre versiones...');
+        const indexToRegenerate = Math.floor(Math.random() * 3);
+        textResults[indexToRegenerate] = await generateText({
+          businessProfile,
+          idea,
+          objective,
+          network,
+          approach: 'unique',
+          forceUnique: true
+        });
+      }
+      
+      setProgressValue(30);
+      setProgressStatus('Generando imágenes personalizadas...');
+      
+      for (let i = 0; i < 3; i++) {
+        setProgressValue(30 + i * 20);
+        setProgressStatus(`Generando versión ${i+1}...`);
+        
         const includeTextOverlay = shouldIncludeTextOnImage(objective);
         const overlayText = includeTextOverlay ? generateOverlayText(objective, idea) : undefined;
         
-        // Step 3: Generate image with full fallback strategy
-        setProgressStatus(`Generando imagen para versión ${i+1}...`);
-        const imagePrompt = createImagePrompt(businessProfile, idea, objective, overlayText);
+        const imagePrompt = createImagePrompt(
+          businessProfile, 
+          idea, 
+          objective, 
+          overlayText,
+          approaches[i].focus
+        );
         
         let imageResult;
         try {
@@ -97,12 +154,11 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
             aspectRatio: getAspectRatioForNetwork(network),
             includedText: overlayText,
             networkFormat: network
-          }, 4); // Use all 4 fallback attempts
+          }, 4);
           
-          // Display appropriate toast message based on fallback level
           if (imageResult.usedFallback) {
             const fallbackMessages = [
-              '', // No fallback (index 0)
+              '',
               'Usando proveedor alternativo para generar imagen',
               'Usando segundo proveedor alternativo',
               'Creando imagen de respaldo con marca',
@@ -111,7 +167,6 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
             
             const level = imageResult.fallbackLevel || 1;
             
-            // Only show warning for fallback levels 3 and 4
             if (level >= 3) {
               toast.warning(fallbackMessages[level], {
                 description: "Se creó una imagen alternativa que puedes editar",
@@ -121,9 +176,8 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
           }
         } catch (error) {
           console.error('Fatal error in image generation:', error);
-          // Ultimate fallback - create a basic placeholder with business colors
           imageResult = {
-            url: `https://via.placeholder.com/1200x1200/${businessProfile.colorPalette[0].replace('#', '')}/${businessProfile.colorPalette[1].replace('#', '')}?text=${encodeURIComponent(businessProfile.name)}`,
+            url: `https://via.placeholder.com/1200x1200/${businessProfile.colorPalette[0].replace('#', '')}/${businessProfile.colorPalette[1].replace('#', '')}?text=${encodeURIComponent(businessProfile.name + ': ' + idea)}`,
             prompt: imagePrompt,
             provider: 'error-fallback',
             usedFallback: true,
@@ -136,32 +190,29 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
           });
         }
         
-        // Step 4: Create Canva edit URL
         const canvaUrl = createCanvaEditUrl(imageResult.url, businessProfile.name);
         
-        // Step 5: Assemble full post content
-        const fullText = `${textResult.title}\n\n${textResult.body}\n\n${textResult.callToAction}\n\n${textResult.hashtags.map(tag => `#${tag}`).join(' ')}`;
+        const fullText = `${textResults[i].title}\n\n${textResults[i].body}\n\n${textResults[i].callToAction}\n\n${textResults[i].hashtags.map(tag => `#${tag}`).join(' ')}`;
         
         newContent.push({
           id: `post-${Date.now()}-${i}`,
-          title: textResult.title,
+          title: textResults[i].title,
           imageUrl: imageResult.url,
           text: fullText,
           network,
           objective,
-          hashtags: textResult.hashtags,
+          hashtags: textResults[i].hashtags,
           idea,
           createdAt: new Date(),
           imagePrompt: imagePrompt,
           imageProvider: imageResult.provider,
-          textProvider: textResult.provider,
+          textProvider: textResults[i].provider,
           imageOverlayText: overlayText,
           canvaEditUrl: canvaUrl,
           usedFallback: imageResult.usedFallback,
           fallbackLevel: imageResult.fallbackLevel
         });
         
-        // Simulate some time between generating each version to avoid rate limits
         if (i < 2) {
           await new Promise(resolve => setTimeout(resolve, 500));
         }
@@ -195,7 +246,6 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
     setProgressStatus('Iniciando modo rápido...');
     
     try {
-      // Generate one piece of quick content with smart defaults
       const quickIdeas = [
         'promoción del mes',
         'novedades importantes',
@@ -207,11 +257,9 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
       const quickObjectives = ['sell', 'inform', 'educate'];
       const quickObjective = quickObjectives[Math.floor(Math.random() * quickObjectives.length)];
       
-      // Progress updates
       setProgressValue(20);
       setProgressStatus('Generando texto optimizado...');
       
-      // Generate text content
       const textResult = await generateText({
         businessProfile,
         idea: quickIdea,
@@ -222,11 +270,9 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
       setProgressValue(50);
       setProgressStatus('Creando imagen profesional...');
       
-      // Determine if we should include text overlay on the image
       const includeTextOverlay = shouldIncludeTextOnImage(quickObjective);
       const overlayText = includeTextOverlay ? generateOverlayText(quickObjective, quickIdea) : undefined;
       
-      // Generate image with fallback
       const imagePrompt = createImagePrompt(businessProfile, quickIdea, quickObjective, overlayText);
       let imageResult;
       
@@ -240,7 +286,6 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
           networkFormat: network
         }, 4);
         
-        // Show toast for fallback only if needed
         if (imageResult.usedFallback && imageResult.fallbackLevel && imageResult.fallbackLevel >= 3) {
           toast.warning('Se utilizó un método alternativo para la imagen', {
             description: "Puedes editar esta imagen en Canva",
@@ -249,7 +294,6 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
         }
       } catch (error) {
         console.error('Fatal error in quick mode image generation:', error);
-        // Ultimate fallback
         imageResult = {
           url: `https://via.placeholder.com/1200x1200/${businessProfile.colorPalette[0].replace('#', '')}/${businessProfile.colorPalette[1].replace('#', '')}?text=${encodeURIComponent(businessProfile.name)}`,
           prompt: imagePrompt,
@@ -264,10 +308,8 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
       setProgressValue(80);
       setProgressStatus('Optimizando resultado...');
       
-      // Create Canva edit URL
       const canvaUrl = createCanvaEditUrl(imageResult.url, businessProfile.name);
       
-      // Assemble full post content
       const fullText = `${textResult.title}\n\n${textResult.body}\n\n${textResult.callToAction}\n\n${textResult.hashtags.map(tag => `#${tag}`).join(' ')}`;
       
       const newContent = [{
@@ -333,11 +375,9 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
 
   const openCanvaEditor = (post: GeneratedPost) => {
     if (post.fallbackLevel === 4 || post.imageProvider === 'canva-fallback') {
-      // For ultimate fallback, show dialog with more options
       setCanvaPost(post);
       setIsCanvaDialogOpen(true);
     } else {
-      // Normal Canva edit flow
       window.open(post.canvaEditUrl, '_blank', 'noopener,noreferrer');
       toast.success('Abriendo editor de imagen en Canva');
     }

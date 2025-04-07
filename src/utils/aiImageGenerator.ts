@@ -1,4 +1,3 @@
-
 import { BusinessProfile } from '@/components/BusinessProfileForm';
 
 // Interface for image generation request parameters
@@ -208,7 +207,8 @@ export const createImagePrompt = (
   business: BusinessProfile,
   idea: string,
   objective: string,
-  includedText?: string
+  includedText?: string,
+  approach?: string
 ): string => {
   let prompt = `${business.industry} related to ${idea}, `;
   
@@ -248,12 +248,35 @@ export const createImagePrompt = (
       break;
   }
   
+  // Add approach variation for more diversity between versions
+  if (approach) {
+    switch (approach) {
+      case 'urgency':
+        prompt += 'creating sense of urgency, limited time offer, exclusive deal, ';
+        break;
+      case 'value':
+        prompt += 'highlighting value proposition, benefits focused, quality emphasis, ';
+        break;
+      case 'emotion':
+        prompt += 'emotionally engaging, creating curiosity, inspirational mood, ';
+        break;
+      case 'unique':
+        prompt += 'distinctive style, unique perspective, standout design, ';
+        break;
+    }
+  }
+  
   if (includedText) {
     prompt += `with text overlay saying "${includedText}", `;
   }
   
-  // Add business name
-  prompt += `for ${business.name} brand`;
+  // Add business name and tone
+  prompt += `for ${business.name} brand with ${business.tone} tone`;
+  
+  // Add slogan if available
+  if (business.slogan) {
+    prompt += `, brand slogan: "${business.slogan}"`;
+  }
   
   return prompt;
 };
@@ -300,6 +323,22 @@ export const generateOverlayText = (objective: string, idea: string): string => 
         `Información importante`,
         `Actualización: ${idea}`,
         `Datos sobre ${idea}`
+      ][Math.floor(Math.random() * 5)];
+    case 'loyalty':
+      return [
+        `¡Gracias por tu apoyo!`,
+        `Valoramos tu fidelidad`,
+        `Exclusivo para clientes`,
+        `${idea} para ti`,
+        `Apreciamos tu confianza`
+      ][Math.floor(Math.random() * 5)];
+    case 'entertain':
+      return [
+        `¡Diviértete con ${idea}!`,
+        `¿Te imaginas ${idea}?`,
+        `${idea} de forma diferente`,
+        `Momento divertido`,
+        `${idea} + diversión`
       ][Math.floor(Math.random() * 5)];
     default:
       return '';
