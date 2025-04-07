@@ -5,7 +5,14 @@ import { PanelTop } from 'lucide-react';
 import { toast } from 'sonner';
 import { GeneratedPost } from '@/models/GeneratedPost';
 import { BusinessProfile } from './BusinessProfileForm';
-import { generateImageWithFallback, createImagePrompt, getAspectRatioForNetwork, shouldIncludeTextOnImage, generateOverlayText } from '@/utils/aiImageGenerator';
+import { 
+  generateImageWithFallback, 
+  createImagePrompt, 
+  getAspectRatioForNetwork, 
+  shouldIncludeTextOnImage, 
+  generateOverlayText,
+  createCanvaEditUrl
+} from '@/utils/image-generation';
 import { generateText } from '@/utils/aiTextGenerator';
 
 // Import refactored components
