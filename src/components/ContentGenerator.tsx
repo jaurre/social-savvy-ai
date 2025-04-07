@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from 'sonner';
-import { Wand, PanelTop, Clock, Image, Edit, Copy, Download, Zap, Calendar, Trash2, ExternalLink, Loader2 } from 'lucide-react';
+import { Wand, PanelTop, Clock, Image, Edit, Copy, Download, Zap, Calendar, Trash2, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { BusinessProfile } from './BusinessProfileForm';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,6 +15,7 @@ import { generateText } from '@/utils/aiTextGenerator';
 import { GeneratedPost, createCanvaEditUrl } from '@/models/GeneratedPost';
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ContentGeneratorProps {
   businessProfile: BusinessProfile;
@@ -50,6 +50,8 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
   const [scheduleDate, setScheduleDate] = useState('');
   const [progressValue, setProgressValue] = useState(0);
   const [progressStatus, setProgressStatus] = useState('');
+  const [isCanvaDialogOpen, setIsCanvaDialogOpen] = useState(false);
+  const [canvaPost, setCanvaPost] = useState<GeneratedPost | null>(null);
 
   const handleGenerateContent = async () => {
     if (!idea) {
@@ -82,17 +84,57 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
         const includeTextOverlay = shouldIncludeTextOnImage(objective);
         const overlayText = includeTextOverlay ? generateOverlayText(objective, idea) : undefined;
         
-        // Step 3: Generate image
+        // Step 3: Generate image with full fallback strategy
         setProgressStatus(`Generando imagen para versión ${i+1}...`);
         const imagePrompt = createImagePrompt(businessProfile, idea, objective, overlayText);
-        const imageResult = await generateImageWithFallback({
-          prompt: imagePrompt,
-          style: businessProfile.visualStyle,
-          colorPalette: businessProfile.colorPalette,
-          aspectRatio: getAspectRatioForNetwork(network),
-          includedText: overlayText,
-          networkFormat: network
-        });
+        
+        let imageResult;
+        try {
+          imageResult = await generateImageWithFallback({
+            prompt: imagePrompt,
+            style: businessProfile.visualStyle,
+            colorPalette: businessProfile.colorPalette,
+            aspectRatio: getAspectRatioForNetwork(network),
+            includedText: overlayText,
+            networkFormat: network
+          }, 4); // Use all 4 fallback attempts
+          
+          // Display appropriate toast message based on fallback level
+          if (imageResult.usedFallback) {
+            const fallbackMessages = [
+              '', // No fallback (index 0)
+              'Usando proveedor alternativo para generar imagen',
+              'Usando segundo proveedor alternativo',
+              'Creando imagen de respaldo con marca',
+              'Preparando plantilla de Canva'
+            ];
+            
+            const level = imageResult.fallbackLevel || 1;
+            
+            // Only show warning for fallback levels 3 and 4
+            if (level >= 3) {
+              toast.warning(fallbackMessages[level], {
+                description: "Se creó una imagen alternativa que puedes editar",
+                duration: 5000,
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Fatal error in image generation:', error);
+          // Ultimate fallback - create a basic placeholder with business colors
+          imageResult = {
+            url: `https://via.placeholder.com/1200x1200/${businessProfile.colorPalette[0].replace('#', '')}/${businessProfile.colorPalette[1].replace('#', '')}?text=${encodeURIComponent(businessProfile.name)}`,
+            prompt: imagePrompt,
+            provider: 'error-fallback',
+            usedFallback: true,
+            fallbackLevel: 4
+          };
+          
+          toast.error('Error al generar imagen. Se usó plantilla básica.', {
+            description: "Puedes editar esta imagen en Canva",
+            duration: 5000,
+          });
+        }
         
         // Step 4: Create Canva edit URL
         const canvaUrl = createCanvaEditUrl(imageResult.url, businessProfile.name);
@@ -114,7 +156,9 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
           imageProvider: imageResult.provider,
           textProvider: textResult.provider,
           imageOverlayText: overlayText,
-          canvaEditUrl: canvaUrl
+          canvaEditUrl: canvaUrl,
+          usedFallback: imageResult.usedFallback,
+          fallbackLevel: imageResult.fallbackLevel
         });
         
         // Simulate some time between generating each version to avoid rate limits
@@ -182,16 +226,40 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
       const includeTextOverlay = shouldIncludeTextOnImage(quickObjective);
       const overlayText = includeTextOverlay ? generateOverlayText(quickObjective, quickIdea) : undefined;
       
-      // Generate image
+      // Generate image with fallback
       const imagePrompt = createImagePrompt(businessProfile, quickIdea, quickObjective, overlayText);
-      const imageResult = await generateImageWithFallback({
-        prompt: imagePrompt,
-        style: businessProfile.visualStyle,
-        colorPalette: businessProfile.colorPalette,
-        aspectRatio: getAspectRatioForNetwork(network),
-        includedText: overlayText,
-        networkFormat: network
-      });
+      let imageResult;
+      
+      try {
+        imageResult = await generateImageWithFallback({
+          prompt: imagePrompt,
+          style: businessProfile.visualStyle,
+          colorPalette: businessProfile.colorPalette,
+          aspectRatio: getAspectRatioForNetwork(network),
+          includedText: overlayText,
+          networkFormat: network
+        }, 4);
+        
+        // Show toast for fallback only if needed
+        if (imageResult.usedFallback && imageResult.fallbackLevel && imageResult.fallbackLevel >= 3) {
+          toast.warning('Se utilizó un método alternativo para la imagen', {
+            description: "Puedes editar esta imagen en Canva",
+            duration: 5000,
+          });
+        }
+      } catch (error) {
+        console.error('Fatal error in quick mode image generation:', error);
+        // Ultimate fallback
+        imageResult = {
+          url: `https://via.placeholder.com/1200x1200/${businessProfile.colorPalette[0].replace('#', '')}/${businessProfile.colorPalette[1].replace('#', '')}?text=${encodeURIComponent(businessProfile.name)}`,
+          prompt: imagePrompt,
+          provider: 'error-fallback',
+          usedFallback: true,
+          fallbackLevel: 4
+        };
+        
+        toast.error('Error al generar imagen. Se usó plantilla básica.');
+      }
       
       setProgressValue(80);
       setProgressStatus('Optimizando resultado...');
@@ -216,7 +284,9 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
         imageProvider: imageResult.provider,
         textProvider: textResult.provider,
         imageOverlayText: overlayText,
-        canvaEditUrl: canvaUrl
+        canvaEditUrl: canvaUrl,
+        usedFallback: imageResult.usedFallback,
+        fallbackLevel: imageResult.fallbackLevel
       }];
       
       setProgressValue(100);
@@ -261,9 +331,69 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
     setObjective('sell');
   };
 
-  const openCanvaEditor = (url: string) => {
-    window.open(url, '_blank', 'noopener,noreferrer');
-    toast.success('Abriendo editor de imagen en Canva');
+  const openCanvaEditor = (post: GeneratedPost) => {
+    if (post.fallbackLevel === 4 || post.imageProvider === 'canva-fallback') {
+      // For ultimate fallback, show dialog with more options
+      setCanvaPost(post);
+      setIsCanvaDialogOpen(true);
+    } else {
+      // Normal Canva edit flow
+      window.open(post.canvaEditUrl, '_blank', 'noopener,noreferrer');
+      toast.success('Abriendo editor de imagen en Canva');
+    }
+  };
+
+  const getFallbackBadge = (post: GeneratedPost) => {
+    if (!post.usedFallback) return null;
+    
+    const level = post.fallbackLevel || 1;
+    
+    if (level <= 2) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
+                <Image className="h-3 w-3 mr-1" /> Alt. IA
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">Imagen generada con proveedor alternativo</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    } else if (level === 3) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 text-xs">
+                <AlertTriangle className="h-3 w-3 mr-1" /> Plantilla
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">Imagen plantilla generada - Editable en Canva</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    } else {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300 text-xs">
+                <Edit className="h-3 w-3 mr-1" /> Editar
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">Requiere edición - Haz clic en "Editar en Canva"</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
   };
 
   return (
@@ -414,6 +544,7 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
                     <Badge variant="secondary" className="bg-white/80 text-black text-xs">
                       {content.imageProvider}
                     </Badge>
+                    {getFallbackBadge(content)}
                   </div>
                   
                   <div className="absolute top-2 left-2">
@@ -482,11 +613,17 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
                 
                 <CardFooter className="p-4 pt-0 flex justify-between border-t">
                   <div 
-                    className="text-xs text-gray-500 flex items-center gap-1 cursor-pointer hover:text-brand-teal"
-                    onClick={() => openCanvaEditor(content.canvaEditUrl || '#')}
+                    className={`text-xs flex items-center gap-1 cursor-pointer ${
+                      content.fallbackLevel === 4 || content.imageProvider === 'canva-fallback' 
+                        ? 'text-red-500 font-medium' 
+                        : 'text-gray-500 hover:text-brand-teal'
+                    }`}
+                    onClick={() => openCanvaEditor(content)}
                   >
                     <ExternalLink className="h-3 w-3" />
-                    Editar en Canva
+                    {content.fallbackLevel === 4 || content.imageProvider === 'canva-fallback' 
+                      ? 'Editar imagen (requerido)' 
+                      : 'Editar en Canva'}
                   </div>
                   <div 
                     className="text-xs text-brand-purple flex items-center gap-1 cursor-pointer hover:underline"
@@ -533,7 +670,6 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
         </div>
       )}
 
-      {/* Schedule Dialog */}
       <Dialog open={isScheduleDialogOpen} onOpenChange={setIsScheduleDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -568,6 +704,50 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
               Programar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCanvaDialogOpen} onOpenChange={setIsCanvaDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar imagen en Canva</DialogTitle>
+            <DialogDescription>
+              No fue posible generar una imagen con IA. Te ofrecemos opciones para crear una imagen profesional.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="bg-amber-50 p-3 rounded-md border border-amber-200 text-amber-800 text-sm">
+              <p className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="font-medium">Imagen requiere edición</span>
+              </p>
+              <p className="mt-1">Nuestros motores de IA no pudieron generar una imagen adecuada para tu contenido. Puedes:</p>
+            </div>
+            
+            <div className="space-y-2">
+              <Button 
+                className="w-full bg-brand-purple" 
+                onClick={() => {
+                  if (canvaPost?.canvaEditUrl) {
+                    window.open(canvaPost.canvaEditUrl, '_blank', 'noopener,noreferrer');
+                    toast.success('Abriendo editor de Canva con tu plantilla');
+                    setIsCanvaDialogOpen(false);
+                  }
+                }}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Editar en Canva con plantilla
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                className="w-full" 
+                onClick={() => setIsCanvaDialogOpen(false)}
+              >
+                Volver al contenido
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

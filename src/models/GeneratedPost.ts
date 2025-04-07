@@ -15,6 +15,8 @@ export interface GeneratedPost {
   textProvider?: string;
   imageOverlayText?: string;
   canvaEditUrl?: string;
+  usedFallback?: boolean;
+  fallbackLevel?: number;
 }
 
 // Function to create a canva edit URL (simulated for now)

@@ -16,12 +16,24 @@ export interface GeneratedImage {
   url: string;
   prompt: string;
   provider: string;
+  usedFallback?: boolean;
+  fallbackLevel?: number;
 }
 
 // Function to simulate AI image generation 
 // In a real implementation, this would connect to actual AI image APIs
-export const generateImage = async (params: ImageGenerationParams): Promise<GeneratedImage> => {
-  console.log('Generating image with params:', params);
+export const generateImage = async (
+  params: ImageGenerationParams, 
+  provider: string = 'primary'
+): Promise<GeneratedImage> => {
+  console.log('Generating image with params:', params, 'using provider:', provider);
+  
+  // Simulate some random failures to test fallback mechanism
+  const shouldFail = Math.random() < 0.2; // 20% chance of failure for testing purposes
+  
+  if (shouldFail && provider === 'primary') {
+    throw new Error('Primary provider image generation failed');
+  }
   
   // In a real implementation, this would be replaced with actual API calls to image generation services
   // For now, we'll simulate with Unsplash images that match the prompt
@@ -45,40 +57,135 @@ export const generateImage = async (params: ImageGenerationParams): Promise<Gene
   const imageUrl = `${baseUrl}/${dimensions}/?${searchQuery}&sig=${imageId}`;
   
   // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  await new Promise(resolve => setTimeout(resolve, 800));
   
   return {
     url: imageUrl,
     prompt: params.prompt,
-    provider: getRandomProvider()
+    provider
   };
 };
 
-// Function to attempt image generation with fallback to different providers
+// Enhanced function to attempt image generation with multiple fallbacks
 export const generateImageWithFallback = async (
   params: ImageGenerationParams,
-  attempts: number = 3
+  maxAttempts: number = 4
 ): Promise<GeneratedImage> => {
+  console.log(`Starting image generation with up to ${maxAttempts} fallback attempts`);
+  
+  // Providers to try in sequence
+  const providers = ['DALL·E', 'Stable Diffusion', 'Midjourney', 'DeepSeek Vision'];
   let lastError;
   
-  for (let i = 0; i < attempts; i++) {
+  // Attempt 1 & 2: Try with different AI providers
+  for (let i = 0; i < Math.min(2, maxAttempts); i++) {
     try {
-      return await generateImage(params);
+      const currentProvider = providers[i % providers.length];
+      console.log(`Attempt ${i + 1}: Trying with ${currentProvider}`);
+      
+      const result = await generateImage(params, currentProvider);
+      console.log(`Successfully generated image with ${currentProvider}`);
+      
+      return {
+        ...result,
+        usedFallback: i > 0,
+        fallbackLevel: i > 0 ? i : undefined
+      };
     } catch (error) {
       console.error(`Attempt ${i + 1} failed:`, error);
       lastError = error;
-      // Simulate switching to a different provider for next attempt
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Short delay before trying next provider
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
   }
   
-  // If all attempts fail, return a default placeholder image
-  console.error('All image generation attempts failed');
+  // Attempt 3: Generate a placeholder image with business colors and text
+  if (maxAttempts > 2) {
+    try {
+      console.log('Attempt 3: Generating placeholder image with business branding');
+      
+      // Create a placeholder image with business colors and embedded text
+      const placeholderImage = createPlaceholderImage(
+        params.colorPalette, 
+        params.includedText || params.prompt, 
+        params.networkFormat
+      );
+      
+      return {
+        url: placeholderImage,
+        prompt: params.prompt,
+        provider: 'placeholder',
+        usedFallback: true,
+        fallbackLevel: 3
+      };
+    } catch (error) {
+      console.error('Placeholder image generation failed:', error);
+      lastError = error;
+    }
+  }
+  
+  // Attempt 4: Last resort - provide a Canva template link
+  console.log('Attempt 4: Providing Canva template as ultimate fallback');
+  const canvaTemplate = createCanvaTemplateUrl(params);
+  
   return {
-    url: `https://via.placeholder.com/800x600/CCCCCC/666666?text=Image+Generation+Failed`,
+    url: `https://via.placeholder.com/800x600/CCCCCC/666666?text=Edit+In+Canva`,
     prompt: params.prompt,
-    provider: 'placeholder'
+    provider: 'canva-fallback',
+    usedFallback: true,
+    fallbackLevel: 4
   };
+};
+
+// Function to create a placeholder image with business branding
+const createPlaceholderImage = (
+  colorPalette: string[],
+  text: string,
+  networkFormat: string
+): string => {
+  // For simulation, we'll use a placeholder service with colors from the business palette
+  // In a real implementation, this could generate a simple branded image
+  
+  // Extract primary and secondary colors from palette
+  const primaryColor = colorPalette[0] || '#8E9196';
+  const secondaryColor = colorPalette[1] || '#9b87f5';
+  
+  // Convert text to a suitable format for a placeholder
+  const placeholderText = encodeURIComponent(text.substring(0, 30).trim() + '...');
+  
+  // Determine dimensions based on network format
+  let width = 800;
+  let height = 800;
+  
+  if (networkFormat === 'instagram') {
+    width = 1080;
+    height = 1350;
+  } else if (networkFormat === 'facebook') {
+    width = 1200;
+    height = 630;
+  } else if (networkFormat === 'tiktok') {
+    width = 1080;
+    height = 1920;
+  }
+  
+  // Create a placeholder URL with the business colors
+  const primaryColorHex = primaryColor.replace('#', '');
+  const secondaryColorHex = secondaryColor.replace('#', '');
+  
+  return `https://via.placeholder.com/${width}x${height}/${primaryColorHex}/${secondaryColorHex}?text=${placeholderText}`;
+};
+
+// Function to create a Canva template URL
+const createCanvaTemplateUrl = (params: ImageGenerationParams): string => {
+  // In a real implementation, this would create a proper Canva template with the business branding
+  // For simulation, we'll just create a URL with parameters
+  
+  const networkFormat = params.networkFormat;
+  const style = params.style;
+  const text = encodeURIComponent(params.includedText || '');
+  const colorPalette = params.colorPalette.join(',').replace(/#/g, '');
+  
+  return `https://www.canva.com/design/create?format=${networkFormat}&style=${style}&text=${text}&colors=${colorPalette}`;
 };
 
 // Function to get aspect ratio based on social network
