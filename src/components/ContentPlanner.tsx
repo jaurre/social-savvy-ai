@@ -12,6 +12,7 @@ import { Calendar as CalendarIcon, ListChecks, Plus, Zap, Instagram, Facebook, B
 import { format, addDays, startOfWeek, addWeeks, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { BusinessProfile } from './BusinessProfileForm';
+import ContentPostDetail from './ContentPostDetail';
 
 interface ContentPlannerProps {
   businessProfile: BusinessProfile;
@@ -87,11 +88,24 @@ const mockScheduledPosts = [
 
 type ViewMode = 'week' | 'month';
 
+interface Post {
+  id: number;
+  title: string;
+  date: Date;
+  network: string;
+  objective: string;
+  status: string;
+  imageUrl: string;
+  content: string;
+}
+
 const ContentPlanner = ({ businessProfile, postsCreated, onGenerateContent }: ContentPlannerProps) => {
   const [date, setDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('week');
-  const [scheduledPosts, setScheduledPosts] = useState(mockScheduledPosts);
+  const [scheduledPosts, setScheduledPosts] = useState<Post[]>(mockScheduledPosts);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [isPostDetailOpen, setIsPostDetailOpen] = useState(false);
   
   const keyDates = getKeyDatesForBusiness(businessProfile.industry || "General");
   
@@ -102,6 +116,36 @@ const ContentPlanner = ({ businessProfile, postsCreated, onGenerateContent }: Co
   };
   
   const nextKeyDate = getNextKeyDate();
+  
+  // Handle post selection
+  const handlePostClick = (post: Post) => {
+    setSelectedPost(post);
+    setIsPostDetailOpen(true);
+  };
+  
+  // Handle post save
+  const handleSavePost = (updatedPost: Post) => {
+    setScheduledPosts(scheduledPosts.map(post => 
+      post.id === updatedPost.id ? updatedPost : post
+    ));
+  };
+  
+  // Handle post delete
+  const handleDeletePost = (postId: number) => {
+    setScheduledPosts(scheduledPosts.filter(post => post.id !== postId));
+  };
+  
+  // Handle post duplicate
+  const handleDuplicatePost = (post: Post) => {
+    const newPost = {
+      ...post,
+      id: Math.floor(Math.random() * 1000) + 100,
+      title: `${post.title} (copia)`,
+      date: new Date(post.date.getTime() + 86400000) // Add one day
+    };
+    
+    setScheduledPosts([...scheduledPosts, newPost]);
+  };
   
   // Handle auto-scheduling content for the week
   const handleAutoScheduleWeek = () => {
@@ -189,8 +233,9 @@ const ContentPlanner = ({ businessProfile, postsCreated, onGenerateContent }: Co
         {postsForDate.map(post => (
           <div 
             key={post.id}
-            className="flex items-center gap-1 p-1 rounded-md bg-white border text-xs cursor-move hover:bg-gray-50"
+            className="flex items-center gap-1 p-1 rounded-md bg-white border text-xs cursor-pointer hover:bg-gray-50"
             draggable
+            onClick={() => handlePostClick(post)}
           >
             {renderNetworkIcon(post.network)}
             <span className="truncate">{post.title}</span>
@@ -259,8 +304,8 @@ const ContentPlanner = ({ businessProfile, postsCreated, onGenerateContent }: Co
                 {scheduledPosts
                   .filter(post => format(post.date, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd'))
                   .map(post => (
-                    <Card key={post.id} className="shadow-sm">
-                      <div className="flex items-start p-3">
+                    <Card key={post.id} className="shadow-sm" onClick={() => handlePostClick(post)}>
+                      <div className="flex items-start p-3 cursor-pointer">
                         <div className="h-12 w-12 rounded overflow-hidden flex-shrink-0 mr-3">
                           <img src={post.imageUrl} alt={post.title} className="h-full w-full object-cover" />
                         </div>
@@ -449,6 +494,16 @@ const ContentPlanner = ({ businessProfile, postsCreated, onGenerateContent }: Co
           </CardContent>
         </Card>
       </div>
+      
+      {/* Post Detail Drawer */}
+      <ContentPostDetail 
+        post={selectedPost}
+        isOpen={isPostDetailOpen}
+        onClose={() => setIsPostDetailOpen(false)}
+        onSave={handleSavePost}
+        onDelete={handleDeletePost}
+        onDuplicate={handleDuplicatePost}
+      />
     </div>
   );
 };

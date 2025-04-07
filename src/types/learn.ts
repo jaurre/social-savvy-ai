@@ -40,3 +40,15 @@ export interface Achievement {
   icon: string;
   isUnlocked: (completedLessons: string[]) => boolean;
 }
+
+// This interface represents the shape of a content post
+export interface ContentPost {
+  id: number;
+  title: string;
+  date: Date;
+  network: string;
+  objective: string;
+  status: string;
+  imageUrl: string;
+  content: string;
+}
