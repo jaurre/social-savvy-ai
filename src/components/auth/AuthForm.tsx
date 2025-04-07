@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Google, Apple, Facebook, Linkedin, AtSign, Lock, User } from 'lucide-react';
+import { Mail, Apple, Facebook, Linkedin, AtSign, Lock, User } from 'lucide-react';
 
 const AuthForm = () => {
   const [activeTab, setActiveTab] = useState<string>('login');
@@ -90,12 +90,12 @@ const AuthForm = () => {
     }
   };
 
-  const handleOAuthSignIn = async (provider: 'google' | 'apple' | 'facebook' | 'linkedin') => {
+  const handleOAuthSignIn = async (provider: 'google' | 'apple' | 'facebook' | 'linkedin_oidc') => {
     try {
       setLoading(true);
       
       let { data, error } = await supabase.auth.signInWithOAuth({
-        provider: provider === 'linkedin' ? 'linkedin_oidc' : provider,
+        provider,
         options: {
           redirectTo: `${window.location.origin}/auth/callback`
         }
@@ -127,7 +127,7 @@ const AuthForm = () => {
           onClick={() => handleOAuthSignIn('google')}
           disabled={loading}
         >
-          <Google className="w-5 h-5" />
+          <Mail className="w-5 h-5" />
           <span>Continuar con Google</span>
         </Button>
         
@@ -151,7 +151,7 @@ const AuthForm = () => {
         
         <Button 
           className="w-full bg-[#0077B5] text-white hover:bg-[#006699] space-x-2"
-          onClick={() => handleOAuthSignIn('linkedin')}
+          onClick={() => handleOAuthSignIn('linkedin_oidc')}
           disabled={loading}
         >
           <Linkedin className="w-5 h-5" />
