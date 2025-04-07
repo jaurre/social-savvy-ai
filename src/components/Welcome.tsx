@@ -2,12 +2,15 @@
 import React from 'react';
 import { Button } from "@/components/ui/button";
 import Logo from "./Logo";
+import { useNavigate } from 'react-router-dom';
 
 interface WelcomeProps {
   onGetStarted: () => void;
 }
 
 const Welcome = ({ onGetStarted }: WelcomeProps) => {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-b from-white to-brand-purple/5">
       <div className="max-w-3xl w-full text-center animate-fade-in">
@@ -83,12 +86,21 @@ const Welcome = ({ onGetStarted }: WelcomeProps) => {
           </div>
         </div>
         
-        <Button 
-          onClick={onGetStarted} 
-          className="text-lg px-8 py-6 bg-brand-purple hover:bg-brand-purple-dark animate-bounce-light"
-        >
-          Comenzar Ahora
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <Button 
+            onClick={onGetStarted} 
+            className="text-lg px-8 py-6 bg-brand-purple hover:bg-brand-purple-dark animate-bounce-light"
+          >
+            Comenzar Ahora
+          </Button>
+          
+          <Button 
+            onClick={() => navigate('/auth')} 
+            className="text-lg px-8 py-6 bg-white border border-brand-purple text-brand-purple hover:bg-brand-purple/10"
+          >
+            Registrarse
+          </Button>
+        </div>
         
         <p className="mt-4 text-sm text-gray-500">
           Crea hasta 3 publicaciones gratis, sin tarjeta de crédito

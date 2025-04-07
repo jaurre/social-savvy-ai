@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Welcome from '@/components/Welcome';
 import BusinessProfileForm, { BusinessProfile } from '@/components/BusinessProfileForm';
 import ContentGenerator from '@/components/ContentGenerator';
@@ -8,6 +9,8 @@ import ContentPlanner from '@/components/ContentPlanner';
 import LearnModule from '@/components/learn/LearnModule';
 import Logo from '@/components/Logo';
 import { Toaster } from "@/components/ui/sonner";
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 enum AppState {
   WELCOME = 'welcome',
@@ -23,14 +26,125 @@ const Index = () => {
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [postsRemaining, setPostsRemaining] = useState(3);
   const [postsCreated, setPostsCreated] = useState(0);
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
-  const handleGetStarted = () => {
-    setAppState(AppState.PROFILE_SETUP);
+  useEffect(() => {
+    // Check if there's an active session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) {
+        // Fetch business profile
+        fetchBusinessProfile(session.user.id);
+      }
+      setLoading(false);
+    });
+
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) {
+        // Fetch business profile
+        fetchBusinessProfile(session.user.id);
+      } else {
+        // If user logged out, reset state
+        setBusinessProfile(null);
+        if (appState !== AppState.WELCOME) {
+          setAppState(AppState.WELCOME);
+        }
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchBusinessProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('business_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching business profile:', error);
+        return;
+      }
+
+      if (data) {
+        // Map database fields to frontend model
+        const profile: BusinessProfile = {
+          name: data.name,
+          industry: data.industry,
+          description: data.description,
+          tone: data.tone,
+          visualStyle: data.visual_style,
+          colorPalette: data.color_palette,
+          slogan: data.slogan || '',
+          logo: data.logo || ''
+        };
+        
+        setBusinessProfile(profile);
+        setAppState(AppState.DASHBOARD);
+      }
+    } catch (error) {
+      console.error('Error fetching business profile:', error);
+    }
   };
 
-  const handleProfileComplete = (profile: BusinessProfile) => {
-    setBusinessProfile(profile);
-    setAppState(AppState.DASHBOARD);
+  const handleGetStarted = () => {
+    if (session) {
+      // User is logged in
+      if (businessProfile) {
+        setAppState(AppState.DASHBOARD);
+      } else {
+        setAppState(AppState.PROFILE_SETUP);
+      }
+    } else {
+      // User needs to authenticate
+      navigate('/auth');
+    }
+  };
+
+  const handleProfileComplete = async (profile: BusinessProfile) => {
+    if (!session) {
+      navigate('/auth');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      
+      const { error } = await supabase.from('business_profiles').insert({
+        id: session.user.id,
+        name: profile.name,
+        industry: profile.industry,
+        description: profile.description,
+        tone: profile.tone,
+        visual_style: profile.visualStyle,
+        color_palette: profile.colorPalette,
+        slogan: profile.slogan || null,
+        logo: profile.logo || null
+      });
+
+      if (error) {
+        toast.error('Error al guardar el perfil', {
+          description: error.message
+        });
+        return;
+      }
+
+      setBusinessProfile(profile);
+      setAppState(AppState.DASHBOARD);
+      toast.success('¡Perfil creado con éxito!');
+    } catch (error: any) {
+      toast.error('Error al guardar el perfil', {
+        description: error.message
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleStartNewContent = () => {
@@ -49,6 +163,31 @@ const Index = () => {
     if (postsRemaining > 0) {
       setPostsRemaining(prev => prev - 1);
       setPostsCreated(prev => prev + 1);
+    }
+  };
+
+  const handleSignIn = () => {
+    navigate('/auth');
+  };
+
+  const handleSignOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        toast.error('Error al cerrar sesión', {
+          description: error.message
+        });
+        return;
+      }
+      
+      toast.success('Sesión cerrada con éxito');
+      setBusinessProfile(null);
+      setAppState(AppState.WELCOME);
+    } catch (error: any) {
+      toast.error('Error al cerrar sesión', {
+        description: error.message
+      });
     }
   };
 
@@ -111,9 +250,21 @@ const Index = () => {
                 <span className="text-gray-500">Publicaciones: </span>
                 <span className="font-medium">{postsRemaining}/3</span>
               </div>
-              <button className="px-4 py-2 rounded-md border border-brand-purple text-brand-purple hover:bg-brand-purple hover:text-white transition-colors">
-                Registrarse
-              </button>
+              {session ? (
+                <button 
+                  onClick={handleSignOut}
+                  className="px-4 py-2 rounded-md border border-brand-purple text-brand-purple hover:bg-brand-purple hover:text-white transition-colors"
+                >
+                  Cerrar sesión
+                </button>
+              ) : (
+                <button 
+                  onClick={handleSignIn}
+                  className="px-4 py-2 rounded-md border border-brand-purple text-brand-purple hover:bg-brand-purple hover:text-white transition-colors"
+                >
+                  Registrarse
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -159,6 +310,14 @@ const Index = () => {
         return null;
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-purple"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
