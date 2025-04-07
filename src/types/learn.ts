@@ -7,6 +7,21 @@ export interface Lesson {
   description: string;
   duration: string;
   icon: string;
+  content?: LessonContent;
+}
+
+export interface LessonContent {
+  introduction: string;
+  keyPoints: {
+    title: string;
+    description: string;
+  }[];
+  practicalExample: {
+    title: string;
+    description: string;
+  };
+  finalTip: string;
+  actionButtonText: string;
 }
 
 export interface Mission {
