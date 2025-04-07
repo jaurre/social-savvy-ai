@@ -7,26 +7,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from 'sonner';
-import { Wand, PanelTop, Clock, Image, Edit, Copy, Download, Zap, Calendar, Trash2 } from 'lucide-react';
+import { Wand, PanelTop, Clock, Image, Edit, Copy, Download, Zap, Calendar, Trash2, ExternalLink, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { BusinessProfile } from './BusinessProfileForm';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { generateImageWithFallback, createImagePrompt, getAspectRatioForNetwork, shouldIncludeTextOnImage, generateOverlayText } from '@/utils/aiImageGenerator';
+import { generateText } from '@/utils/aiTextGenerator';
+import { GeneratedPost, createCanvaEditUrl } from '@/models/GeneratedPost';
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 
 interface ContentGeneratorProps {
   businessProfile: BusinessProfile;
   postsRemaining: number;
   onGenerateContent: () => void;
-}
-
-interface GeneratedPost {
-  id: string;
-  title: string;
-  imageUrl: string;
-  text: string;
-  network: string;
-  objective: string;
-  hashtags: string[];
-  idea?: string;
 }
 
 const SOCIAL_NETWORKS = [
@@ -45,177 +39,6 @@ const OBJECTIVES = [
   { value: 'educate', label: 'Educar' }
 ];
 
-// Helper function to generate random image from Unsplash based on business and idea
-const getRandomImageUrl = (business: BusinessProfile, idea: string, network: string) => {
-  const keywords = [
-    business.industry,
-    idea,
-    business.visualStyle,
-    network
-  ].filter(Boolean).join(',');
-  
-  const width = 1200;
-  const height = 800;
-  const imageId = Math.floor(Math.random() * 1000);
-  
-  return `https://source.unsplash.com/random/${width}x${height}/?${encodeURIComponent(keywords)}&sig=${imageId}`;
-};
-
-// Helper function to generate hashtags based on business profile and objective
-const generateHashtags = (business: BusinessProfile, objective: string, idea: string) => {
-  const baseHashtags = [
-    business.name.toLowerCase().replace(/\s/g, ''),
-    business.industry.toLowerCase(),
-    idea.toLowerCase().replace(/\s/g, '')
-  ];
-  
-  let objectiveHashtags: string[] = [];
-  
-  switch (objective) {
-    case 'sell':
-      objectiveHashtags = ['oferta', 'promoción', 'descuento', 'compraahora'];
-      break;
-    case 'inform':
-      objectiveHashtags = ['sabíasque', 'información', 'datos', 'actualidad'];
-      break;
-    case 'entertain':
-      objectiveHashtags = ['diversión', 'humor', 'sonríe', 'momentos'];
-      break;
-    case 'loyalty':
-      objectiveHashtags = ['gracias', 'clientes', 'fidelidad', 'comunidad'];
-      break;
-    case 'educate':
-      objectiveHashtags = ['aprende', 'conocimiento', 'consejos', 'tips'];
-      break;
-  }
-  
-  return [...baseHashtags, ...objectiveHashtags].slice(0, 6);
-};
-
-// Generate post titles based on objective and business profile
-const generatePostTitle = (objective: string, business: BusinessProfile, idea: string) => {
-  const titles = {
-    sell: [
-      `¡OFERTA EXCLUSIVA para ${idea}!`,
-      `¡DESCUENTO ESPECIAL en ${idea}!`,
-      `¡PROMOCIÓN LIMITADA para ${idea}!`
-    ],
-    inform: [
-      `Todo lo que debes saber sobre ${idea}`,
-      `${business.name} te cuenta sobre ${idea}`,
-      `¿Sabías esto sobre ${idea}?`
-    ],
-    entertain: [
-      `Momentos divertidos con ${idea}`,
-      `¡${idea} como nunca lo imaginaste!`,
-      `La cara divertida de ${idea}`
-    ],
-    loyalty: [
-      `Gracias por compartir ${idea} con nosotros`,
-      `Celebramos ${idea} junto a ti`,
-      `${business.name} valora tu apoyo con ${idea}`
-    ],
-    educate: [
-      `Aprende todo sobre ${idea}`,
-      `Guía completa de ${idea}`,
-      `Tips profesionales para ${idea}`
-    ]
-  };
-  
-  const options = titles[objective as keyof typeof titles] || titles.inform;
-  return options[Math.floor(Math.random() * options.length)];
-};
-
-// Generate post text based on all parameters
-const generatePostText = (
-  business: BusinessProfile,
-  idea: string,
-  objective: string,
-  network: string,
-  title: string,
-  hashtags: string[]
-) => {
-  let tone = business.tone === 'professional' ? 'formal' : 
-             business.tone === 'funny' ? 'divertido' : business.tone;
-  
-  let intro = '';
-  let body = '';
-  let cta = '';
-  let hashtagText = '';
-  
-  // Generate intro based on objective
-  switch (objective) {
-    case 'sell':
-      intro = `¡${title} ✨ Solo por tiempo limitado en ${business.name}.`;
-      body = `Disfruta de nuestra increíble oferta para ${idea}. ${business.description}`;
-      cta = '¡No te lo pierdas! 🛍️ Contáctanos ahora mismo.';
-      break;
-    case 'inform':
-      intro = `${title} 📢`;
-      body = `Queremos compartirte información importante sobre ${idea}. En ${business.name} creemos que mantener a nuestra comunidad informada es esencial.`;
-      cta = '¿Qué opinas sobre esto? Déjanos tu comentario 👇';
-      break;
-    case 'entertain':
-      intro = `${title} 😄`;
-      body = `En ${business.name} también nos gusta divertirnos. ${idea} puede ser una experiencia increíble cuando lo compartes con los mejores.`;
-      cta = '¡Etiqueta a alguien con quien disfrutarías esto! 👯‍♂️';
-      break;
-    case 'loyalty':
-      intro = `${title} ❤️`;
-      body = `En ${business.name} valoramos enormemente tu confianza y lealtad. Queremos agradecerte por ser parte de nuestra comunidad y compartir ${idea} con nosotros.`;
-      cta = '¿Cuál ha sido tu experiencia favorita con nosotros? Cuéntanos 💬';
-      break;
-    case 'educate':
-      intro = `${title} 💡`;
-      body = `Hoy queremos compartir nuestro conocimiento sobre ${idea}. ${business.description.split('.')[0]}.`;
-      cta = '¿Te resultó útil esta información? Guárdala para consultarla después 📌';
-      break;
-  }
-  
-  // Adapt length based on network
-  if (network === 'instagram' || network === 'tiktok') {
-    body = body.split('.')[0] + '.';
-  } else if (network === 'whatsapp') {
-    body += ` ${business.slogan || ''}`;
-  }
-  
-  // Add hashtags
-  hashtagText = hashtags.map(tag => `#${tag}`).join(' ');
-  
-  return `${intro}\n\n${body}\n\n${cta}\n\n${hashtagText}`;
-};
-
-// Main function to generate posts
-const generatePosts = (
-  business: BusinessProfile,
-  idea: string,
-  objective: string,
-  network: string,
-  count: number
-): GeneratedPost[] => {
-  const posts: GeneratedPost[] = [];
-  
-  for (let i = 0; i < count; i++) {
-    const hashtags = generateHashtags(business, objective, idea);
-    const title = generatePostTitle(objective, business, idea);
-    const text = generatePostText(business, idea, objective, network, title, hashtags);
-    const imageUrl = getRandomImageUrl(business, idea, network);
-    
-    posts.push({
-      id: `post-${Date.now()}-${i}`,
-      title,
-      imageUrl,
-      text,
-      network,
-      objective,
-      hashtags,
-      idea
-    });
-  }
-  
-  return posts;
-};
-
 const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }: ContentGeneratorProps) => {
   const [idea, setIdea] = useState('');
   const [network, setNetwork] = useState('instagram');
@@ -225,59 +48,189 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
   const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<GeneratedPost | null>(null);
   const [scheduleDate, setScheduleDate] = useState('');
+  const [progressValue, setProgressValue] = useState(0);
+  const [progressStatus, setProgressStatus] = useState('');
 
-  const handleGenerateContent = () => {
+  const handleGenerateContent = async () => {
     if (!idea) {
       toast.error('Por favor, ingresa una idea para tu publicación');
       return;
     }
 
     setIsGenerating(true);
+    setProgressValue(0);
+    setProgressStatus('Iniciando generación...');
     
-    // Generate 3 versions of the content
-    setTimeout(() => {
-      const newContent = generatePosts(
-        businessProfile,
-        idea,
-        objective,
-        network,
-        3
-      );
+    try {
+      // Generate 3 versions of the content
+      const newContent: GeneratedPost[] = [];
+      
+      for (let i = 0; i < 3; i++) {
+        setProgressValue(i * 30);
+        setProgressStatus(`Generando versión ${i+1}...`);
+        
+        // Step 1: Generate text content
+        setProgressStatus(`Generando texto para versión ${i+1}...`);
+        const textResult = await generateText({
+          businessProfile,
+          idea,
+          objective,
+          network
+        });
+        
+        // Step 2: Determine if we should include text overlay on the image
+        const includeTextOverlay = shouldIncludeTextOnImage(objective);
+        const overlayText = includeTextOverlay ? generateOverlayText(objective, idea) : undefined;
+        
+        // Step 3: Generate image
+        setProgressStatus(`Generando imagen para versión ${i+1}...`);
+        const imagePrompt = createImagePrompt(businessProfile, idea, objective, overlayText);
+        const imageResult = await generateImageWithFallback({
+          prompt: imagePrompt,
+          style: businessProfile.visualStyle,
+          colorPalette: businessProfile.colorPalette,
+          aspectRatio: getAspectRatioForNetwork(network),
+          includedText: overlayText,
+          networkFormat: network
+        });
+        
+        // Step 4: Create Canva edit URL
+        const canvaUrl = createCanvaEditUrl(imageResult.url, businessProfile.name);
+        
+        // Step 5: Assemble full post content
+        const fullText = `${textResult.title}\n\n${textResult.body}\n\n${textResult.callToAction}\n\n${textResult.hashtags.map(tag => `#${tag}`).join(' ')}`;
+        
+        newContent.push({
+          id: `post-${Date.now()}-${i}`,
+          title: textResult.title,
+          imageUrl: imageResult.url,
+          text: fullText,
+          network,
+          objective,
+          hashtags: textResult.hashtags,
+          idea,
+          createdAt: new Date(),
+          imagePrompt: imagePrompt,
+          imageProvider: imageResult.provider,
+          textProvider: textResult.provider,
+          imageOverlayText: overlayText,
+          canvaEditUrl: canvaUrl
+        });
+        
+        // Simulate some time between generating each version to avoid rate limits
+        if (i < 2) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      setProgressValue(95);
+      setProgressStatus('Finalizando...');
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       setGeneratedContent(newContent);
-      setIsGenerating(false);
+      setProgressValue(100);
+      setProgressStatus('¡Generación completada!');
       onGenerateContent();
-      toast.success('¡Contenido generado con éxito!');
-    }, 2000);
+      toast.success('¡Contenido de alta calidad generado con éxito!');
+    } catch (error) {
+      console.error('Error generating content:', error);
+      toast.error('Hubo un error al generar el contenido. Por favor, intenta nuevamente.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  const handleQuickMode = () => {
-    toast('Generando contenido rápido...', {
+  const handleQuickMode = async () => {
+    toast('Generando contenido de alta calidad...', {
       duration: 1500,
       icon: <Zap className="w-4 h-4 text-brand-teal" />,
     });
     
     setIsGenerating(true);
+    setProgressValue(0);
+    setProgressStatus('Iniciando modo rápido...');
     
-    // Generate one piece of quick content with default values
-    setTimeout(() => {
-      const quickIdea = ['promoción', 'novedades', 'consejo útil', 'agradecimiento'][
-        Math.floor(Math.random() * 4)
+    try {
+      // Generate one piece of quick content with smart defaults
+      const quickIdeas = [
+        'promoción del mes',
+        'novedades importantes',
+        'consejo profesional',
+        'agradecimiento especial'
       ];
+      const quickIdea = quickIdeas[Math.floor(Math.random() * quickIdeas.length)];
       
-      const newContent = generatePosts(
+      const quickObjectives = ['sell', 'inform', 'educate'];
+      const quickObjective = quickObjectives[Math.floor(Math.random() * quickObjectives.length)];
+      
+      // Progress updates
+      setProgressValue(20);
+      setProgressStatus('Generando texto optimizado...');
+      
+      // Generate text content
+      const textResult = await generateText({
         businessProfile,
-        quickIdea,
-        objective,
+        idea: quickIdea,
+        objective: quickObjective,
+        network
+      });
+      
+      setProgressValue(50);
+      setProgressStatus('Creando imagen profesional...');
+      
+      // Determine if we should include text overlay on the image
+      const includeTextOverlay = shouldIncludeTextOnImage(quickObjective);
+      const overlayText = includeTextOverlay ? generateOverlayText(quickObjective, quickIdea) : undefined;
+      
+      // Generate image
+      const imagePrompt = createImagePrompt(businessProfile, quickIdea, quickObjective, overlayText);
+      const imageResult = await generateImageWithFallback({
+        prompt: imagePrompt,
+        style: businessProfile.visualStyle,
+        colorPalette: businessProfile.colorPalette,
+        aspectRatio: getAspectRatioForNetwork(network),
+        includedText: overlayText,
+        networkFormat: network
+      });
+      
+      setProgressValue(80);
+      setProgressStatus('Optimizando resultado...');
+      
+      // Create Canva edit URL
+      const canvaUrl = createCanvaEditUrl(imageResult.url, businessProfile.name);
+      
+      // Assemble full post content
+      const fullText = `${textResult.title}\n\n${textResult.body}\n\n${textResult.callToAction}\n\n${textResult.hashtags.map(tag => `#${tag}`).join(' ')}`;
+      
+      const newContent = [{
+        id: `post-${Date.now()}-0`,
+        title: textResult.title,
+        imageUrl: imageResult.url,
+        text: fullText,
         network,
-        1
-      );
+        objective: quickObjective,
+        hashtags: textResult.hashtags,
+        idea: quickIdea,
+        createdAt: new Date(),
+        imagePrompt: imagePrompt,
+        imageProvider: imageResult.provider,
+        textProvider: textResult.provider,
+        imageOverlayText: overlayText,
+        canvaEditUrl: canvaUrl
+      }];
+      
+      setProgressValue(100);
+      setProgressStatus('¡Listo!');
       
       setGeneratedContent(newContent);
-      setIsGenerating(false);
       onGenerateContent();
-      toast.success('¡Contenido rápido generado!');
-    }, 1500);
+      toast.success('¡Contenido de alta calidad generado en modo rápido!');
+    } catch (error) {
+      console.error('Error in quick mode:', error);
+      toast.error('Hubo un error en el modo rápido. Por favor, intenta nuevamente.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleCopyContent = (content: string) => {
@@ -306,6 +259,11 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
     setIdea('');
     setNetwork('instagram');
     setObjective('sell');
+  };
+
+  const openCanvaEditor = (url: string) => {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    toast.success('Abriendo editor de imagen en Canva');
   };
 
   return (
@@ -393,10 +351,25 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
                 onClick={handleGenerateContent}
                 disabled={postsRemaining <= 0 || isGenerating}
               >
-                {isGenerating ? 'Generando...' : 'Generar Contenido'}
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Generando...
+                  </>
+                ) : 'Generar Contenido'}
               </Button>
             </div>
           </div>
+          
+          {isGenerating && (
+            <div className="mt-6 space-y-2">
+              <div className="flex justify-between text-sm text-gray-500 mb-1">
+                <span>{progressStatus}</span>
+                <span>{progressValue}%</span>
+              </div>
+              <Progress value={progressValue} className="h-2" />
+            </div>
+          )}
           
           {postsRemaining <= 0 && (
             <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
@@ -427,21 +400,36 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {generatedContent.map((content, index) => (
               <Card key={content.id} className="overflow-hidden card-hover">
-                <div className="relative h-48">
+                <div className="relative h-52">
                   <img 
                     src={content.imageUrl} 
                     alt={content.title}
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex items-end p-4">
-                    <div className="text-white font-bold text-lg">{content.title}</div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-4">
+                    <div className="text-white font-bold text-lg line-clamp-2">{content.title}</div>
+                  </div>
+                  
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    <Badge variant="secondary" className="bg-white/80 text-black text-xs">
+                      {content.imageProvider}
+                    </Badge>
+                  </div>
+                  
+                  <div className="absolute top-2 left-2">
+                    <Badge className="bg-brand-purple text-white capitalize text-xs">
+                      {SOCIAL_NETWORKS.find(n => n.value === content.network)?.label}
+                    </Badge>
                   </div>
                 </div>
                 
                 <CardHeader className="p-4 pb-2">
                   <div className="flex justify-between items-center">
-                    <div className="text-sm font-medium text-gray-500">
+                    <div className="text-sm font-medium text-gray-500 flex items-center gap-2">
                       Versión {index + 1}
+                      <Badge variant="outline" className="capitalize text-xs">
+                        {OBJECTIVES.find(o => o.value === content.objective)?.label}
+                      </Badge>
                     </div>
                     <div className="flex gap-1">
                       <Button 
@@ -474,15 +462,31 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
                 </CardHeader>
                 
                 <CardContent className="p-4 pt-0">
-                  <div className="text-sm text-gray-600 whitespace-pre-line h-32 overflow-y-auto">
+                  <div className="text-sm text-gray-600 whitespace-pre-line h-36 overflow-y-auto">
                     {content.text}
+                  </div>
+                  
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {content.hashtags.slice(0, 5).map((tag, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">
+                        #{tag}
+                      </Badge>
+                    ))}
+                    {content.hashtags.length > 5 && (
+                      <Badge variant="secondary" className="text-xs">
+                        +{content.hashtags.length - 5}
+                      </Badge>
+                    )}
                   </div>
                 </CardContent>
                 
                 <CardFooter className="p-4 pt-0 flex justify-between border-t">
-                  <div className="text-xs text-gray-500 flex items-center gap-1">
-                    <Image className="h-3 w-3" />
-                    Editar imagen
+                  <div 
+                    className="text-xs text-gray-500 flex items-center gap-1 cursor-pointer hover:text-brand-teal"
+                    onClick={() => openCanvaEditor(content.canvaEditUrl || '#')}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Editar en Canva
                   </div>
                   <div 
                     className="text-xs text-brand-purple flex items-center gap-1 cursor-pointer hover:underline"
@@ -517,6 +521,13 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
                   OBJECTIVES.find(o => o.value === objective)?.label
                 }</span>
               </div>
+            </div>
+            
+            <div className="mt-3 text-sm text-gray-500">
+              <p className="flex items-center gap-1">
+                <Wand className="w-3.5 h-3.5 text-brand-purple" />
+                Contenido generado con inteligencia artificial avanzada utilizando datos de tu negocio
+              </p>
             </div>
           </div>
         </div>
