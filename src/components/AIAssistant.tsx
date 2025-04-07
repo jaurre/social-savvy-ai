@@ -63,18 +63,18 @@ const AIAssistant = ({ businessProfile, isExpanded = true, onToggleExpand }: AIA
     
     if (lowerCaseMsg.includes('post') || lowerCaseMsg.includes('publicación')) {
       if (lowerCaseMsg.includes('día') || lowerCaseMsg.includes('fecha')) {
-        response = `Claro, puedo ayudarte con un post para una fecha especial. Para ${businessProfile.sector}, te recomiendo contenido que destaque la relevancia de esta fecha para tu audiencia y cómo tu producto/servicio puede ser parte de la celebración. ¿Para qué fecha específica necesitas el post?`;
+        response = `Claro, puedo ayudarte con un post para una fecha especial. Para ${businessProfile.industry}, te recomiendo contenido que destaque la relevancia de esta fecha para tu audiencia y cómo tu producto/servicio puede ser parte de la celebración. ¿Para qué fecha específica necesitas el post?`;
       } else {
-        response = `Entendido, para crear un post efectivo para ${businessProfile.name} en el sector de ${businessProfile.sector}, recomiendo usar un tono ${businessProfile.tone} y enfocarse en los beneficios de tu servicio. ¿Para qué red social quieres crear este contenido?`;
+        response = `Entendido, para crear un post efectivo para ${businessProfile.name} en el sector de ${businessProfile.industry}, recomiendo usar un tono ${businessProfile.tone} y enfocarse en los beneficios de tu servicio. ¿Para qué red social quieres crear este contenido?`;
       }
     } else if (lowerCaseMsg.includes('idea') || lowerCaseMsg.includes('sugerencia')) {
-      response = `Algunas ideas de contenido para ${businessProfile.sector} podrían ser:\n\n1. Mostrar el "detrás de escena" de tu negocio\n2. Compartir testimonios de clientes satisfechos\n3. Crear tutoriales relacionados con tus productos/servicios\n4. Publicar datos interesantes o estadísticas de tu industria\n5. Realizar encuestas para conocer mejor a tu audiencia`;
+      response = `Algunas ideas de contenido para ${businessProfile.industry} podrían ser:\n\n1. Mostrar el "detrás de escena" de tu negocio\n2. Compartir testimonios de clientes satisfechos\n3. Crear tutoriales relacionados con tus productos/servicios\n4. Publicar datos interesantes o estadísticas de tu industria\n5. Realizar encuestas para conocer mejor a tu audiencia`;
     } else if (lowerCaseMsg.includes('estrategia')) {
       response = `Para desarrollar una estrategia efectiva para ${businessProfile.name}, recomendaría:\n\n1. Publicar contenido consistentemente (3-4 veces por semana)\n2. Alternar entre contenido educativo, promocional y de entretenimiento\n3. Usar hashtags relevantes para tu industria\n4. Participar activamente respondiendo comentarios\n5. Analizar qué tipo de contenido genera más engagement`;
     } else if (lowerCaseMsg.includes('métricas') || lowerCaseMsg.includes('estadística')) {
       response = `Para analizar métricas de forma efectiva, te recomiendo enfocarte en:\n\n1. Tasa de engagement (likes, comentarios, compartidos)\n2. Crecimiento de seguidores\n3. Alcance de tus publicaciones\n4. Conversiones (si tienes llamados a la acción)\n5. Mejor horario para publicar\n\n¿Necesitas ayuda para interpretar alguna métrica específica?`;
     } else {
-      response = `Gracias por tu mensaje. Como tu asistente de marketing, estoy aquí para ayudarte con tu estrategia de contenido para ${businessProfile.name}. ¿Te gustaría que te ayude con ideas para posts, recomendaciones para mejorar tu presencia en redes sociales, o consejos específicos para tu sector (${businessProfile.sector})?`;
+      response = `Gracias por tu mensaje. Como tu asistente de marketing, estoy aquí para ayudarte con tu estrategia de contenido para ${businessProfile.name}. ¿Te gustaría que te ayude con ideas para posts, recomendaciones para mejorar tu presencia en redes sociales, o consejos específicos para tu sector (${businessProfile.industry})?`;
     }
     
     setMessages(prev => [...prev, {
