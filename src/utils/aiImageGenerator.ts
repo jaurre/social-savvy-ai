@@ -1,3 +1,4 @@
+
 import { BusinessProfile } from '@/components/BusinessProfileForm';
 
 // Interface for image generation request parameters
@@ -8,6 +9,7 @@ export interface ImageGenerationParams {
   aspectRatio: string;
   includedText?: string;
   networkFormat: string;
+  businessName?: string;
 }
 
 // Interface for image generation response
@@ -17,6 +19,7 @@ export interface GeneratedImage {
   provider: string;
   usedFallback?: boolean;
   fallbackLevel?: number;
+  requiresEditing?: boolean;
 }
 
 // Function to simulate AI image generation 
@@ -77,12 +80,12 @@ export const generateImageWithFallback = async (
   let lastError;
   
   // Attempt 1 & 2: Try with different AI providers
-  for (let i = 0; i < Math.min(2, maxAttempts); i++) {
+  for (let i = 0; i < Math.min(maxAttempts, providers.length); i++) {
     try {
-      const currentProvider = providers[i % providers.length];
+      const currentProvider = providers[i];
       console.log(`Attempt ${i + 1}: Trying with ${currentProvider}`);
       
-      const result = await generateImage(params, currentProvider);
+      const result = await generateImage({...params, prompt: enhancePromptForProvider(params.prompt, currentProvider)}, currentProvider);
       console.log(`Successfully generated image with ${currentProvider}`);
       
       return {
@@ -99,7 +102,7 @@ export const generateImageWithFallback = async (
   }
   
   // Attempt 3: Generate a placeholder image with business colors and text
-  if (maxAttempts > 2) {
+  if (maxAttempts > providers.length) {
     try {
       console.log('Attempt 3: Generating placeholder image with business branding');
       
@@ -107,7 +110,8 @@ export const generateImageWithFallback = async (
       const placeholderImage = createPlaceholderImage(
         params.colorPalette, 
         params.includedText || params.prompt, 
-        params.networkFormat
+        params.networkFormat,
+        params.businessName
       );
       
       return {
@@ -115,7 +119,8 @@ export const generateImageWithFallback = async (
         prompt: params.prompt,
         provider: 'placeholder',
         usedFallback: true,
-        fallbackLevel: 3
+        fallbackLevel: 3,
+        requiresEditing: true
       };
     } catch (error) {
       console.error('Placeholder image generation failed:', error);
@@ -127,20 +132,46 @@ export const generateImageWithFallback = async (
   console.log('Attempt 4: Providing Canva template as ultimate fallback');
   const canvaTemplate = createCanvaTemplateUrl(params);
   
+  // Generate an absolute fallback image that always works
+  const fallbackImageUrl = createAbsoluteFallbackImage(
+    params.colorPalette, 
+    params.includedText || 'Editar esta imagen', 
+    params.networkFormat,
+    params.businessName
+  );
+  
   return {
-    url: `https://via.placeholder.com/800x600/CCCCCC/666666?text=Edit+In+Canva`,
+    url: fallbackImageUrl,
     prompt: params.prompt,
     provider: 'canva-fallback',
     usedFallback: true,
-    fallbackLevel: 4
+    fallbackLevel: 4,
+    requiresEditing: true
   };
+};
+
+// Enhance prompt for specific providers to improve results
+const enhancePromptForProvider = (prompt: string, provider: string): string => {
+  switch (provider) {
+    case 'DALL·E':
+      return `${prompt}, high quality, detailed, photorealistic`;
+    case 'Stable Diffusion':
+      return `${prompt}, highly detailed, sharp focus, professional photography`;
+    case 'Midjourney':
+      return `${prompt}, vibrant colors, high resolution, trending on artstation`;
+    case 'DeepSeek Vision':
+      return `${prompt}, cinematic lighting, 8k resolution, conceptual design`;
+    default:
+      return prompt;
+  }
 };
 
 // Function to create a placeholder image with business branding
 const createPlaceholderImage = (
   colorPalette: string[],
   text: string,
-  networkFormat: string
+  networkFormat: string,
+  businessName?: string
 ): string => {
   // For simulation, we'll use a placeholder service with colors from the business palette
   // In a real implementation, this could generate a simple branded image
@@ -151,6 +182,11 @@ const createPlaceholderImage = (
   
   // Convert text to a suitable format for a placeholder
   const placeholderText = encodeURIComponent(text.substring(0, 30).trim() + '...');
+  
+  // Add business name if available
+  const brandedText = businessName 
+    ? encodeURIComponent(`${businessName}: ${text.substring(0, 20).trim()}...`) 
+    : placeholderText;
   
   // Determine dimensions based on network format
   let width = 800;
@@ -171,7 +207,34 @@ const createPlaceholderImage = (
   const primaryColorHex = primaryColor.replace('#', '');
   const secondaryColorHex = secondaryColor.replace('#', '');
   
-  return `https://via.placeholder.com/${width}x${height}/${primaryColorHex}/${secondaryColorHex}?text=${placeholderText}`;
+  return `https://via.placeholder.com/${width}x${height}/${primaryColorHex}/${secondaryColorHex}?text=${brandedText}`;
+};
+
+// Function to create an absolute fallback image that will never fail
+const createAbsoluteFallbackImage = (
+  colorPalette: string[],
+  text: string,
+  networkFormat: string,
+  businessName?: string
+): string => {
+  // We use a similar approach as createPlaceholderImage but with guaranteed values
+  const primaryColor = colorPalette[0] || '8E9196';
+  const secondaryColor = colorPalette[1] || '9b87f5';
+  
+  // Safely encode text
+  const safeText = encodeURIComponent((businessName ? `${businessName}: ` : '') + 'Editar en Canva');
+  
+  // Get dimensions based on network
+  let dimensions = '800x800';
+  if (networkFormat === 'instagram') dimensions = '1080x1350';
+  if (networkFormat === 'facebook') dimensions = '1200x630';
+  if (networkFormat === 'tiktok') dimensions = '1080x1920';
+  
+  // Create a safe URL that won't break
+  const primaryColorHex = primaryColor.replace('#', '');
+  const secondaryColorHex = secondaryColor.replace('#', '');
+  
+  return `https://via.placeholder.com/${dimensions}/${primaryColorHex}/${secondaryColorHex}?text=${safeText}`;
 };
 
 // Function to create a Canva template URL
@@ -183,8 +246,9 @@ const createCanvaTemplateUrl = (params: ImageGenerationParams): string => {
   const style = params.style;
   const text = encodeURIComponent(params.includedText || '');
   const colorPalette = params.colorPalette.join(',').replace(/#/g, '');
+  const businessName = encodeURIComponent(params.businessName || '');
   
-  return `https://www.canva.com/design/create?format=${networkFormat}&style=${style}&text=${text}&colors=${colorPalette}`;
+  return `https://www.canva.com/design/create?format=${networkFormat}&style=${style}&text=${text}&colors=${colorPalette}&businessName=${businessName}`;
 };
 
 // Function to get aspect ratio based on social network

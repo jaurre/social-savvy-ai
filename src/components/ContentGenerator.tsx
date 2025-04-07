@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,7 +13,7 @@ import { BusinessProfile } from './BusinessProfileForm';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { generateImageWithFallback, createImagePrompt, getAspectRatioForNetwork, shouldIncludeTextOnImage, generateOverlayText } from '@/utils/aiImageGenerator';
 import { generateText } from '@/utils/aiTextGenerator';
-import { GeneratedPost, createCanvaEditUrl } from '@/models/GeneratedPost';
+import { GeneratedPost, createCanvaEditUrl, requiresImageEditing } from '@/models/GeneratedPost';
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -153,7 +154,8 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
             colorPalette: businessProfile.colorPalette,
             aspectRatio: getAspectRatioForNetwork(network),
             includedText: overlayText,
-            networkFormat: network
+            networkFormat: network,
+            businessName: businessProfile.name
           }, 4);
           
           if (imageResult.usedFallback) {
@@ -176,12 +178,14 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
           }
         } catch (error) {
           console.error('Fatal error in image generation:', error);
+          // Create absolute fallback image that will never fail
           imageResult = {
             url: `https://via.placeholder.com/1200x1200/${businessProfile.colorPalette[0].replace('#', '')}/${businessProfile.colorPalette[1].replace('#', '')}?text=${encodeURIComponent(businessProfile.name + ': ' + idea)}`,
             prompt: imagePrompt,
             provider: 'error-fallback',
             usedFallback: true,
-            fallbackLevel: 4
+            fallbackLevel: 4,
+            requiresEditing: true
           };
           
           toast.error('Error al generar imagen. Se usó plantilla básica.', {
@@ -191,6 +195,7 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
         }
         
         const canvaUrl = createCanvaEditUrl(imageResult.url, businessProfile.name);
+        const requiresEditing = imageResult.requiresEditing || (imageResult.fallbackLevel && imageResult.fallbackLevel >= 3);
         
         const fullText = `${textResults[i].title}\n\n${textResults[i].body}\n\n${textResults[i].callToAction}\n\n${textResults[i].hashtags.map(tag => `#${tag}`).join(' ')}`;
         
@@ -210,7 +215,8 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
           imageOverlayText: overlayText,
           canvaEditUrl: canvaUrl,
           usedFallback: imageResult.usedFallback,
-          fallbackLevel: imageResult.fallbackLevel
+          fallbackLevel: imageResult.fallbackLevel,
+          requiresEditing
         });
         
         if (i < 2) {
@@ -283,7 +289,8 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
           colorPalette: businessProfile.colorPalette,
           aspectRatio: getAspectRatioForNetwork(network),
           includedText: overlayText,
-          networkFormat: network
+          networkFormat: network,
+          businessName: businessProfile.name
         }, 4);
         
         if (imageResult.usedFallback && imageResult.fallbackLevel && imageResult.fallbackLevel >= 3) {
@@ -294,12 +301,14 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
         }
       } catch (error) {
         console.error('Fatal error in quick mode image generation:', error);
+        // Create absolute fallback image that will never fail
         imageResult = {
           url: `https://via.placeholder.com/1200x1200/${businessProfile.colorPalette[0].replace('#', '')}/${businessProfile.colorPalette[1].replace('#', '')}?text=${encodeURIComponent(businessProfile.name)}`,
           prompt: imagePrompt,
           provider: 'error-fallback',
           usedFallback: true,
-          fallbackLevel: 4
+          fallbackLevel: 4,
+          requiresEditing: true
         };
         
         toast.error('Error al generar imagen. Se usó plantilla básica.');
@@ -309,6 +318,7 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
       setProgressStatus('Optimizando resultado...');
       
       const canvaUrl = createCanvaEditUrl(imageResult.url, businessProfile.name);
+      const requiresEditing = imageResult.requiresEditing || (imageResult.fallbackLevel && imageResult.fallbackLevel >= 3);
       
       const fullText = `${textResult.title}\n\n${textResult.body}\n\n${textResult.callToAction}\n\n${textResult.hashtags.map(tag => `#${tag}`).join(' ')}`;
       
@@ -328,7 +338,8 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
         imageOverlayText: overlayText,
         canvaEditUrl: canvaUrl,
         usedFallback: imageResult.usedFallback,
-        fallbackLevel: imageResult.fallbackLevel
+        fallbackLevel: imageResult.fallbackLevel,
+        requiresEditing
       }];
       
       setProgressValue(100);
@@ -374,7 +385,7 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
   };
 
   const openCanvaEditor = (post: GeneratedPost) => {
-    if (post.fallbackLevel === 4 || post.imageProvider === 'canva-fallback') {
+    if (post.fallbackLevel === 4 || post.imageProvider === 'canva-fallback' || post.requiresEditing) {
       setCanvaPost(post);
       setIsCanvaDialogOpen(true);
     } else {
@@ -575,6 +586,14 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
                     src={content.imageUrl} 
                     alt={content.title}
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback image in case of loading errors
+                      (e.target as HTMLImageElement).src = `https://via.placeholder.com/1200x1200/${businessProfile.colorPalette[0].replace('#', '')}/${businessProfile.colorPalette[1].replace('#', '')}?text=${encodeURIComponent('Imagen para editar')}`;
+                      if (!content.requiresEditing) {
+                        content.requiresEditing = true;
+                        toast.error('Error al cargar la imagen. Por favor, edita en Canva', { duration: 3000 });
+                      }
+                    }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-4">
                     <div className="text-white font-bold text-lg line-clamp-2">{content.title}</div>
@@ -592,6 +611,19 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
                       {SOCIAL_NETWORKS.find(n => n.value === content.network)?.label}
                     </Badge>
                   </div>
+                  
+                  {content.requiresEditing && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                      <Button 
+                        variant="secondary" 
+                        className="bg-white hover:bg-gray-100"
+                        onClick={() => openCanvaEditor(content)}
+                      >
+                        <Edit className="mr-2 h-4 w-4" />
+                        Editar imagen en Canva
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 
                 <CardHeader className="p-4 pb-2">
@@ -654,14 +686,14 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
                 <CardFooter className="p-4 pt-0 flex justify-between border-t">
                   <div 
                     className={`text-xs flex items-center gap-1 cursor-pointer ${
-                      content.fallbackLevel === 4 || content.imageProvider === 'canva-fallback' 
+                      content.requiresEditing || content.fallbackLevel === 4 || content.imageProvider === 'canva-fallback' 
                         ? 'text-red-500 font-medium' 
                         : 'text-gray-500 hover:text-brand-teal'
                     }`}
                     onClick={() => openCanvaEditor(content)}
                   >
                     <ExternalLink className="h-3 w-3" />
-                    {content.fallbackLevel === 4 || content.imageProvider === 'canva-fallback' 
+                    {content.requiresEditing || content.fallbackLevel === 4 || content.imageProvider === 'canva-fallback' 
                       ? 'Editar imagen (requerido)' 
                       : 'Editar en Canva'}
                   </div>
@@ -752,17 +784,21 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
           <DialogHeader>
             <DialogTitle>Editar imagen en Canva</DialogTitle>
             <DialogDescription>
-              No fue posible generar una imagen con IA. Te ofrecemos opciones para crear una imagen profesional.
+              {canvaPost?.fallbackLevel === 4 || canvaPost?.imageProvider === 'canva-fallback' 
+                ? 'No fue posible generar una imagen con IA. Te ofrecemos opciones para crear una imagen profesional.'
+                : 'Personaliza tu imagen para hacerla única'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="bg-amber-50 p-3 rounded-md border border-amber-200 text-amber-800 text-sm">
-              <p className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                <span className="font-medium">Imagen requiere edición</span>
-              </p>
-              <p className="mt-1">Nuestros motores de IA no pudieron generar una imagen adecuada para tu contenido. Puedes:</p>
-            </div>
+            {(canvaPost?.fallbackLevel === 4 || canvaPost?.imageProvider === 'canva-fallback') && (
+              <div className="bg-amber-50 p-3 rounded-md border border-amber-200 text-amber-800 text-sm">
+                <p className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span className="font-medium">Imagen requiere edición</span>
+                </p>
+                <p className="mt-1">Nuestros motores de IA no pudieron generar una imagen adecuada para tu contenido. Puedes:</p>
+              </div>
+            )}
             
             <div className="space-y-2">
               <Button 

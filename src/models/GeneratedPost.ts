@@ -18,6 +18,7 @@ export interface GeneratedPost {
   usedFallback?: boolean;
   fallbackLevel?: number;
   approach?: string;
+  requiresEditing?: boolean;
 }
 
 // Function to create a canva edit URL (simulated for now)
@@ -28,4 +29,9 @@ export const createCanvaEditUrl = (imageUrl: string, businessName: string): stri
   const encodedBusiness = encodeURIComponent(businessName);
   
   return `https://www.canva.com/design/new?template=true&imageUrl=${encodedImage}&businessName=${encodedBusiness}`;
+};
+
+// Function to check if an image needs editing based on fallback level
+export const requiresImageEditing = (post: GeneratedPost): boolean => {
+  return !!post.usedFallback && (post.fallbackLevel || 0) >= 3;
 };
