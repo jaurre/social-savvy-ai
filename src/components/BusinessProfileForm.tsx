@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,6 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from 'sonner';
+import { handleLogoUpload, validateImageDimensions } from '@/utils/image-generation/utils';
+import { Image, Upload, Trash2 } from 'lucide-react';
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 export interface BusinessProfile {
   name: string;
@@ -71,6 +74,8 @@ const BusinessProfileForm = ({ onComplete }: BusinessProfileFormProps) => {
     logo: '',
     slogan: ''
   });
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (field: keyof BusinessProfile, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -84,6 +89,56 @@ const BusinessProfileForm = ({ onComplete }: BusinessProfileFormProps) => {
         colorPalette: COLOR_PALETTES[style]
       }));
     }
+  };
+
+  const handleFileSelect = async (file: File) => {
+    try {
+      const dataUrl = await handleLogoUpload(file);
+      const isValidDimensions = await validateImageDimensions(dataUrl, 100, 100);
+      
+      if (!isValidDimensions) {
+        toast.error('La imagen es demasiado pequeña. Mínimo 100x100 píxeles.');
+        return;
+      }
+      
+      setFormData(prev => ({ ...prev, logo: dataUrl }));
+      toast.success('Logo subido correctamente');
+    } catch (error) {
+      toast.error((error as Error).message || 'Error al subir el logo');
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileSelect(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleFileSelect(e.target.files[0]);
+    }
+  };
+
+  const handleSelectFileClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleRemoveLogo = () => {
+    setFormData(prev => ({ ...prev, logo: '' }));
+    toast.success('Logo eliminado');
   };
 
   const handleNext = () => {
@@ -258,13 +313,53 @@ const BusinessProfileForm = ({ onComplete }: BusinessProfileFormProps) => {
           
           <div>
             <Label htmlFor="business-logo">Logo</Label>
-            <p className="text-sm text-gray-500 mb-2">Opcional: Puedes añadir un logo más adelante</p>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-              <p className="text-gray-500">
-                Arrastra y suelta tu logo aquí o 
-                <Button variant="link" className="px-1">selecciona un archivo</Button>
-              </p>
-            </div>
+            <p className="text-sm text-gray-500 mb-2">Opcional: Sube el logo de tu negocio</p>
+            
+            {formData.logo ? (
+              <div className="mt-4 flex flex-col items-center">
+                <div className="relative mb-2">
+                  <Avatar className="w-24 h-24 rounded-md">
+                    <AvatarImage src={formData.logo} alt="Logo" className="object-contain" />
+                    <AvatarFallback className="rounded-md">
+                      <Image className="w-8 h-8 text-gray-400" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <button 
+                    onClick={handleRemoveLogo}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                    aria-label="Eliminar logo"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600">Logo cargado correctamente</p>
+              </div>
+            ) : (
+              <div
+                className={`border-2 border-dashed ${isDragging ? 'border-brand-purple bg-brand-purple/5' : 'border-gray-300'} rounded-lg p-6 text-center cursor-pointer transition-colors`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={handleSelectFileClick}
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileInputChange}
+                  accept="image/*"
+                  className="hidden"
+                  aria-label="Subir logo"
+                />
+                <Upload className="w-10 h-10 mx-auto mb-2 text-gray-400" />
+                <p className="text-gray-500">
+                  Arrastra y suelta tu logo aquí o{' '}
+                  <span className="text-brand-purple hover:underline">selecciona un archivo</span>
+                </p>
+                <p className="text-xs text-gray-400 mt-2">
+                  Formatos: PNG, JPG, GIF, SVG (máx. 5MB)
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
