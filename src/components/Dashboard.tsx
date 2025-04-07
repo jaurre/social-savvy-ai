@@ -1,10 +1,11 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PanelTop, BarChart2, Calendar, Lightbulb, HelpCircle, Zap } from 'lucide-react';
+import { PanelTop, BarChart2, Calendar, Lightbulb, Zap } from 'lucide-react';
 import { BusinessProfile } from './BusinessProfileForm';
 import { toast } from 'sonner';
+import AIAssistant from './AIAssistant';
 
 interface DashboardProps {
   businessProfile: BusinessProfile;
@@ -13,6 +14,8 @@ interface DashboardProps {
 }
 
 const Dashboard = ({ businessProfile, postsCreated, onStartNewContent }: DashboardProps) => {
+  const [isAssistantExpanded, setIsAssistantExpanded] = useState(true);
+
   const handlePanicMode = () => {
     toast('¡Modo pánico activado! Generando contenido...', {
       duration: 1500,
@@ -22,6 +25,10 @@ const Dashboard = ({ businessProfile, postsCreated, onStartNewContent }: Dashboa
     setTimeout(() => {
       toast.success('Contenido rápido generado');
     }, 1500);
+  };
+
+  const toggleAssistantExpand = () => {
+    setIsAssistantExpanded(!isAssistantExpanded);
   };
 
   return (
@@ -133,49 +140,11 @@ const Dashboard = ({ businessProfile, postsCreated, onStartNewContent }: Dashboa
       </div>
       
       <div className="grid grid-cols-1 gap-6">
-        <Card className="card-hover">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <HelpCircle className="w-5 h-5 text-brand-purple" />
-                <CardTitle className="text-lg">Asistente IA</CardTitle>
-              </div>
-              <Button variant="ghost" size="sm" disabled>
-                Ver historial
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="bg-gray-50 p-4 rounded-lg mb-4">
-              <div className="flex items-start gap-3">
-                <div className="bg-brand-purple text-white p-2 rounded-full">
-                  <HelpCircle className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="font-medium">Copilot</div>
-                  <div className="text-gray-600">
-                    ¡Hola {businessProfile.name}! ¿En qué puedo ayudarte hoy? Puedes pedirme que te cree un post para una fecha especial, te dé ideas para tu contenido o te resuma tus métricas.
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="relative">
-              <input 
-                type="text" 
-                placeholder="Escribe tu pregunta o solicitud aquí..." 
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-purple"
-                disabled
-              />
-              <Button 
-                className="absolute right-1 top-1 bottom-1 bg-brand-purple hover:bg-brand-purple-dark rounded-md"
-                disabled
-              >
-                Enviar
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <AIAssistant 
+          businessProfile={businessProfile} 
+          isExpanded={isAssistantExpanded}
+          onToggleExpand={toggleAssistantExpand}
+        />
       </div>
     </div>
   );
