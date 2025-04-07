@@ -5,6 +5,7 @@ import BusinessProfileForm, { BusinessProfile } from '@/components/BusinessProfi
 import ContentGenerator from '@/components/ContentGenerator';
 import Dashboard from '@/components/Dashboard';
 import ContentPlanner from '@/components/ContentPlanner';
+import LearnModule from '@/components/learn/LearnModule';
 import Logo from '@/components/Logo';
 import { Toaster } from "@/components/ui/sonner";
 
@@ -14,6 +15,7 @@ enum AppState {
   DASHBOARD = 'dashboard',
   CONTENT_GENERATOR = 'content_generator',
   CONTENT_PLANNER = 'content_planner',
+  LEARN_MODULE = 'learn_module',
 }
 
 const Index = () => {
@@ -37,6 +39,10 @@ const Index = () => {
 
   const handleViewCalendar = () => {
     setAppState(AppState.CONTENT_PLANNER);
+  };
+  
+  const handleViewLearn = () => {
+    setAppState(AppState.LEARN_MODULE);
   };
 
   const handleGenerateContent = () => {
@@ -86,6 +92,16 @@ const Index = () => {
               >
                 Planificador
               </button>
+              <button 
+                onClick={() => setAppState(AppState.LEARN_MODULE)}
+                className={`px-4 py-2 rounded-md transition-colors ${
+                  appState === AppState.LEARN_MODULE 
+                    ? 'bg-brand-purple/10 text-brand-purple font-medium' 
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Aprende Más
+              </button>
             </nav>
           )}
           
@@ -118,6 +134,7 @@ const Index = () => {
             postsCreated={postsCreated}
             onStartNewContent={handleStartNewContent}
             onViewCalendar={handleViewCalendar}
+            onViewLearn={handleViewLearn}
           />
         ) : null;
       case AppState.CONTENT_GENERATOR:
@@ -136,6 +153,8 @@ const Index = () => {
             onGenerateContent={handleGenerateContent}
           />
         ) : null;
+      case AppState.LEARN_MODULE:
+        return <LearnModule />;
       default:
         return null;
     }

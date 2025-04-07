@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PanelTop, BarChart2, Calendar, Lightbulb, Zap } from 'lucide-react';
+import { PanelTop, BarChart2, Calendar, Lightbulb, Zap, BookOpen } from 'lucide-react';
 import { BusinessProfile } from './BusinessProfileForm';
 import { toast } from 'sonner';
 import AIAssistant from './AIAssistant';
@@ -12,9 +12,10 @@ interface DashboardProps {
   postsCreated: number;
   onStartNewContent: () => void;
   onViewCalendar: () => void;
+  onViewLearn: () => void;
 }
 
-const Dashboard = ({ businessProfile, postsCreated, onStartNewContent, onViewCalendar }: DashboardProps) => {
+const Dashboard = ({ businessProfile, postsCreated, onStartNewContent, onViewCalendar, onViewLearn }: DashboardProps) => {
   const [isAssistantExpanded, setIsAssistantExpanded] = useState(true);
 
   const handlePanicMode = () => {
@@ -121,7 +122,7 @@ const Dashboard = ({ businessProfile, postsCreated, onStartNewContent, onViewCal
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <div className="p-2 bg-brand-coral/10 rounded-md">
-                <Lightbulb className="w-5 h-5 text-brand-coral" />
+                <BookOpen className="w-5 h-5 text-brand-coral" />
               </div>
               <CardTitle className="text-lg">Aprende Más</CardTitle>
             </div>
@@ -136,7 +137,11 @@ const Dashboard = ({ businessProfile, postsCreated, onStartNewContent, onViewCal
                 <div className="text-sm text-gray-500">Lecciones completadas</div>
                 <div className="text-2xl font-bold">0/5</div>
               </div>
-              <Button variant="outline" className="w-full mt-2" disabled>
+              <Button 
+                variant="outline" 
+                className="w-full mt-2"
+                onClick={onViewLearn}
+              >
                 Comenzar Aprendizaje
               </Button>
             </div>
