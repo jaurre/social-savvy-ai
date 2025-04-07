@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -7,9 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from 'sonner';
-import { Wand, PanelTop, Clock, Image, Edit, Copy, Download, Zap } from 'lucide-react';
+import { Wand, PanelTop, Clock, Image, Edit, Copy, Download, Zap, Calendar, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { BusinessProfile } from './BusinessProfileForm';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ContentGeneratorProps {
   businessProfile: BusinessProfile;
@@ -17,36 +18,213 @@ interface ContentGeneratorProps {
   onGenerateContent: () => void;
 }
 
-const POST_EXAMPLES = [
-  {
-    title: 'Oferta Especial',
-    imageUrl: 'https://images.unsplash.com/photo-1488590528505-98d2b5aba04b',
-    text: '¡OFERTA EXCLUSIVA! ✨ Solo por esta semana, llevate todos nuestros productos con un 25% OFF. ¡No te lo pierdas! 🛍️\n\n#oferta #descuento #compras',
-    network: 'instagram',
-    objective: 'sell'
-  },
-  {
-    title: 'Nuevo Producto',
-    imageUrl: 'https://images.unsplash.com/photo-1561998338-13ad7883b157',
-    text: '¡NOVEDAD! 🚀 Presentamos nuestro último lanzamiento que transformará tu experiencia. ¡Descubre todos los detalles haciendo clic en el enlace de nuestra bio! 📱\n\n#nuevo #innovación #tecnología',
-    network: 'instagram',
-    objective: 'sell'
-  },
-  {
-    title: 'Consejo Útil',
-    imageUrl: 'https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d',
-    text: '¿Sabías que...? 💡 Estos 3 consejos prácticos te ayudarán a mejorar tu productividad diaria. ¡Cuéntanos cuál te funcionó mejor! 👇\n\n#consejos #productividad #bienestar',
-    network: 'facebook',
-    objective: 'educate'
-  }
+interface GeneratedPost {
+  id: string;
+  title: string;
+  imageUrl: string;
+  text: string;
+  network: string;
+  objective: string;
+  hashtags: string[];
+  idea?: string;
+}
+
+const SOCIAL_NETWORKS = [
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'tiktok', label: 'TikTok' },
+  { value: 'email', label: 'Email' }
 ];
+
+const OBJECTIVES = [
+  { value: 'sell', label: 'Vender' },
+  { value: 'inform', label: 'Informar' },
+  { value: 'entertain', label: 'Entretener' },
+  { value: 'loyalty', label: 'Fidelizar' },
+  { value: 'educate', label: 'Educar' }
+];
+
+// Helper function to generate random image from Unsplash based on business and idea
+const getRandomImageUrl = (business: BusinessProfile, idea: string, network: string) => {
+  const keywords = [
+    business.industry,
+    idea,
+    business.visualStyle,
+    network
+  ].filter(Boolean).join(',');
+  
+  const width = 1200;
+  const height = 800;
+  const imageId = Math.floor(Math.random() * 1000);
+  
+  return `https://source.unsplash.com/random/${width}x${height}/?${encodeURIComponent(keywords)}&sig=${imageId}`;
+};
+
+// Helper function to generate hashtags based on business profile and objective
+const generateHashtags = (business: BusinessProfile, objective: string, idea: string) => {
+  const baseHashtags = [
+    business.name.toLowerCase().replace(/\s/g, ''),
+    business.industry.toLowerCase(),
+    idea.toLowerCase().replace(/\s/g, '')
+  ];
+  
+  let objectiveHashtags: string[] = [];
+  
+  switch (objective) {
+    case 'sell':
+      objectiveHashtags = ['oferta', 'promoción', 'descuento', 'compraahora'];
+      break;
+    case 'inform':
+      objectiveHashtags = ['sabíasque', 'información', 'datos', 'actualidad'];
+      break;
+    case 'entertain':
+      objectiveHashtags = ['diversión', 'humor', 'sonríe', 'momentos'];
+      break;
+    case 'loyalty':
+      objectiveHashtags = ['gracias', 'clientes', 'fidelidad', 'comunidad'];
+      break;
+    case 'educate':
+      objectiveHashtags = ['aprende', 'conocimiento', 'consejos', 'tips'];
+      break;
+  }
+  
+  return [...baseHashtags, ...objectiveHashtags].slice(0, 6);
+};
+
+// Generate post titles based on objective and business profile
+const generatePostTitle = (objective: string, business: BusinessProfile, idea: string) => {
+  const titles = {
+    sell: [
+      `¡OFERTA EXCLUSIVA para ${idea}!`,
+      `¡DESCUENTO ESPECIAL en ${idea}!`,
+      `¡PROMOCIÓN LIMITADA para ${idea}!`
+    ],
+    inform: [
+      `Todo lo que debes saber sobre ${idea}`,
+      `${business.name} te cuenta sobre ${idea}`,
+      `¿Sabías esto sobre ${idea}?`
+    ],
+    entertain: [
+      `Momentos divertidos con ${idea}`,
+      `¡${idea} como nunca lo imaginaste!`,
+      `La cara divertida de ${idea}`
+    ],
+    loyalty: [
+      `Gracias por compartir ${idea} con nosotros`,
+      `Celebramos ${idea} junto a ti`,
+      `${business.name} valora tu apoyo con ${idea}`
+    ],
+    educate: [
+      `Aprende todo sobre ${idea}`,
+      `Guía completa de ${idea}`,
+      `Tips profesionales para ${idea}`
+    ]
+  };
+  
+  const options = titles[objective as keyof typeof titles] || titles.inform;
+  return options[Math.floor(Math.random() * options.length)];
+};
+
+// Generate post text based on all parameters
+const generatePostText = (
+  business: BusinessProfile,
+  idea: string,
+  objective: string,
+  network: string,
+  title: string,
+  hashtags: string[]
+) => {
+  let tone = business.tone === 'professional' ? 'formal' : 
+             business.tone === 'funny' ? 'divertido' : business.tone;
+  
+  let intro = '';
+  let body = '';
+  let cta = '';
+  let hashtagText = '';
+  
+  // Generate intro based on objective
+  switch (objective) {
+    case 'sell':
+      intro = `¡${title} ✨ Solo por tiempo limitado en ${business.name}.`;
+      body = `Disfruta de nuestra increíble oferta para ${idea}. ${business.description}`;
+      cta = '¡No te lo pierdas! 🛍️ Contáctanos ahora mismo.';
+      break;
+    case 'inform':
+      intro = `${title} 📢`;
+      body = `Queremos compartirte información importante sobre ${idea}. En ${business.name} creemos que mantener a nuestra comunidad informada es esencial.`;
+      cta = '¿Qué opinas sobre esto? Déjanos tu comentario 👇';
+      break;
+    case 'entertain':
+      intro = `${title} 😄`;
+      body = `En ${business.name} también nos gusta divertirnos. ${idea} puede ser una experiencia increíble cuando lo compartes con los mejores.`;
+      cta = '¡Etiqueta a alguien con quien disfrutarías esto! 👯‍♂️';
+      break;
+    case 'loyalty':
+      intro = `${title} ❤️`;
+      body = `En ${business.name} valoramos enormemente tu confianza y lealtad. Queremos agradecerte por ser parte de nuestra comunidad y compartir ${idea} con nosotros.`;
+      cta = '¿Cuál ha sido tu experiencia favorita con nosotros? Cuéntanos 💬';
+      break;
+    case 'educate':
+      intro = `${title} 💡`;
+      body = `Hoy queremos compartir nuestro conocimiento sobre ${idea}. ${business.description.split('.')[0]}.`;
+      cta = '¿Te resultó útil esta información? Guárdala para consultarla después 📌';
+      break;
+  }
+  
+  // Adapt length based on network
+  if (network === 'instagram' || network === 'tiktok') {
+    body = body.split('.')[0] + '.';
+  } else if (network === 'whatsapp') {
+    body += ` ${business.slogan || ''}`;
+  }
+  
+  // Add hashtags
+  hashtagText = hashtags.map(tag => `#${tag}`).join(' ');
+  
+  return `${intro}\n\n${body}\n\n${cta}\n\n${hashtagText}`;
+};
+
+// Main function to generate posts
+const generatePosts = (
+  business: BusinessProfile,
+  idea: string,
+  objective: string,
+  network: string,
+  count: number
+): GeneratedPost[] => {
+  const posts: GeneratedPost[] = [];
+  
+  for (let i = 0; i < count; i++) {
+    const hashtags = generateHashtags(business, objective, idea);
+    const title = generatePostTitle(objective, business, idea);
+    const text = generatePostText(business, idea, objective, network, title, hashtags);
+    const imageUrl = getRandomImageUrl(business, idea, network);
+    
+    posts.push({
+      id: `post-${Date.now()}-${i}`,
+      title,
+      imageUrl,
+      text,
+      network,
+      objective,
+      hashtags,
+      idea
+    });
+  }
+  
+  return posts;
+};
 
 const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }: ContentGeneratorProps) => {
   const [idea, setIdea] = useState('');
   const [network, setNetwork] = useState('instagram');
   const [objective, setObjective] = useState('sell');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedContent, setGeneratedContent] = useState<any[]>([]);
+  const [generatedContent, setGeneratedContent] = useState<GeneratedPost[]>([]);
+  const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<GeneratedPost | null>(null);
+  const [scheduleDate, setScheduleDate] = useState('');
 
   const handleGenerateContent = () => {
     if (!idea) {
@@ -56,11 +234,18 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
 
     setIsGenerating(true);
     
-    // Simulate content generation
+    // Generate 3 versions of the content
     setTimeout(() => {
+      const newContent = generatePosts(
+        businessProfile,
+        idea,
+        objective,
+        network,
+        3
+      );
+      
+      setGeneratedContent(newContent);
       setIsGenerating(false);
-      // Use the examples as mock generated content
-      setGeneratedContent(POST_EXAMPLES);
       onGenerateContent();
       toast.success('¡Contenido generado con éxito!');
     }, 2000);
@@ -74,14 +259,53 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
     
     setIsGenerating(true);
     
-    // Simulate quick content generation
+    // Generate one piece of quick content with default values
     setTimeout(() => {
+      const quickIdea = ['promoción', 'novedades', 'consejo útil', 'agradecimiento'][
+        Math.floor(Math.random() * 4)
+      ];
+      
+      const newContent = generatePosts(
+        businessProfile,
+        quickIdea,
+        objective,
+        network,
+        1
+      );
+      
+      setGeneratedContent(newContent);
       setIsGenerating(false);
-      // Use one example as mock generated content
-      setGeneratedContent([POST_EXAMPLES[Math.floor(Math.random() * POST_EXAMPLES.length)]]);
       onGenerateContent();
       toast.success('¡Contenido rápido generado!');
     }, 1500);
+  };
+
+  const handleCopyContent = (content: string) => {
+    navigator.clipboard.writeText(content);
+    toast.success('Contenido copiado al portapapeles');
+  };
+
+  const handleSchedulePost = (post: GeneratedPost) => {
+    setSelectedPost(post);
+    setIsScheduleDialogOpen(true);
+  };
+
+  const handleConfirmSchedule = () => {
+    if (!scheduleDate) {
+      toast.error('Por favor selecciona una fecha para programar');
+      return;
+    }
+    
+    toast.success(`Publicación programada para ${scheduleDate}`);
+    setIsScheduleDialogOpen(false);
+    setScheduleDate('');
+  };
+
+  const handleCreateNew = () => {
+    setGeneratedContent([]);
+    setIdea('');
+    setNetwork('instagram');
+    setObjective('sell');
   };
 
   return (
@@ -116,11 +340,11 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
                   <SelectValue placeholder="Selecciona un canal" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="instagram">Instagram</SelectItem>
-                  <SelectItem value="facebook">Facebook</SelectItem>
-                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                  <SelectItem value="tiktok">TikTok</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
+                  {SOCIAL_NETWORKS.map(network => (
+                    <SelectItem key={network.value} value={network.value}>
+                      {network.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -134,11 +358,11 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
                   <SelectValue placeholder="Selecciona un objetivo" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="sell">Vender</SelectItem>
-                  <SelectItem value="inform">Informar</SelectItem>
-                  <SelectItem value="entertain">Entretener</SelectItem>
-                  <SelectItem value="loyalty">Fidelizar</SelectItem>
-                  <SelectItem value="educate">Educar</SelectItem>
+                  {OBJECTIVES.map(objective => (
+                    <SelectItem key={objective.value} value={objective.value}>
+                      {objective.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -194,10 +418,7 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
             
             <Button 
               variant="outline" 
-              onClick={() => {
-                setGeneratedContent([]);
-                setIdea('');
-              }}
+              onClick={handleCreateNew}
             >
               Crear Nuevo
             </Button>
@@ -205,7 +426,7 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {generatedContent.map((content, index) => (
-              <Card key={index} className="overflow-hidden card-hover">
+              <Card key={content.id} className="overflow-hidden card-hover">
                 <div className="relative h-48">
                   <img 
                     src={content.imageUrl} 
@@ -223,13 +444,29 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
                       Versión {index + 1}
                     </div>
                     <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="h-8 w-8 p-0"
+                        title="Editar"
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="h-8 w-8 p-0"
+                        title="Copiar"
+                        onClick={() => handleCopyContent(content.text)}
+                      >
                         <Copy className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="h-8 w-8 p-0"
+                        title="Descargar"
+                      >
                         <Download className="h-4 w-4" />
                       </Button>
                     </div>
@@ -247,8 +484,11 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
                     <Image className="h-3 w-3" />
                     Editar imagen
                   </div>
-                  <div className="text-xs text-gray-500 flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
+                  <div 
+                    className="text-xs text-brand-purple flex items-center gap-1 cursor-pointer hover:underline"
+                    onClick={() => handleSchedulePost(content)}
+                  >
+                    <Calendar className="h-3 w-3" />
                     Programar
                   </div>
                 </CardFooter>
@@ -261,20 +501,64 @@ const ContentGenerator = ({ businessProfile, postsRemaining, onGenerateContent }
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-white p-3 rounded border border-gray-200">
                 <span className="text-xs font-medium text-gray-500 block">Idea</span>
-                <span className="block truncate">{idea || 'Generación rápida'}</span>
+                <span className="block truncate">{generatedContent[0]?.idea || idea || 'Generación rápida'}</span>
               </div>
               <div className="bg-white p-3 rounded border border-gray-200">
                 <span className="text-xs font-medium text-gray-500 block">Canal</span>
-                <span className="block capitalize">{generatedContent[0]?.network || network}</span>
+                <span className="block capitalize">{
+                  SOCIAL_NETWORKS.find(n => n.value === generatedContent[0]?.network)?.label || 
+                  SOCIAL_NETWORKS.find(n => n.value === network)?.label
+                }</span>
               </div>
               <div className="bg-white p-3 rounded border border-gray-200">
                 <span className="text-xs font-medium text-gray-500 block">Objetivo</span>
-                <span className="block capitalize">{generatedContent[0]?.objective || objective}</span>
+                <span className="block capitalize">{
+                  OBJECTIVES.find(o => o.value === generatedContent[0]?.objective)?.label || 
+                  OBJECTIVES.find(o => o.value === objective)?.label
+                }</span>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Schedule Dialog */}
+      <Dialog open={isScheduleDialogOpen} onOpenChange={setIsScheduleDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Programar publicación</DialogTitle>
+            <DialogDescription>
+              Selecciona la fecha y hora para publicar este contenido
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="schedule-date">Fecha y hora</Label>
+              <Input
+                id="schedule-date"
+                type="datetime-local"
+                value={scheduleDate}
+                onChange={(e) => setScheduleDate(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Vista previa</Label>
+              <div className="bg-gray-50 p-3 rounded-md text-sm">
+                <p className="font-medium">{selectedPost?.title}</p>
+                <p className="text-gray-600 text-xs mt-1 line-clamp-2">{selectedPost?.text}</p>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsScheduleDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" onClick={handleConfirmSchedule}>
+              Programar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
