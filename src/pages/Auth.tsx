@@ -8,14 +8,16 @@ import { BusinessProfile } from '@/components/BusinessProfileForm';
 import BusinessProfileSetup from '@/components/auth/BusinessProfileSetup';
 import Logo from '@/components/Logo';
 import { Button } from '@/components/ui/button';
+import { Loader } from 'lucide-react';
 
 enum AuthStep {
+  LOADING = 'loading',
   AUTH = 'auth',
   PROFILE_SETUP = 'profile_setup'
 }
 
 const Auth = () => {
-  const [authStep, setAuthStep] = useState<AuthStep>(AuthStep.AUTH);
+  const [authStep, setAuthStep] = useState<AuthStep>(AuthStep.LOADING);
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -27,8 +29,10 @@ const Auth = () => {
       if (session) {
         // Check if user has a business profile
         checkBusinessProfile(session.user.id);
+      } else {
+        setAuthStep(AuthStep.AUTH);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     // Set up auth state listener
@@ -37,6 +41,9 @@ const Auth = () => {
       if (session) {
         // Check if user has a business profile
         checkBusinessProfile(session.user.id);
+      } else {
+        setAuthStep(AuthStep.AUTH);
+        setLoading(false);
       }
     });
 
@@ -49,10 +56,14 @@ const Auth = () => {
         .from('business_profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error checking business profile:', error);
+        toast.error('Error al verificar tu perfil de negocio', {
+          description: error.message
+        });
+        setLoading(false);
         return;
       }
 
@@ -62,9 +73,14 @@ const Auth = () => {
       } else {
         // User needs to set up a profile
         setAuthStep(AuthStep.PROFILE_SETUP);
+        setLoading(false);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error checking business profile:', error);
+      toast.error('Error al verificar tu perfil de negocio', {
+        description: error.message
+      });
+      setLoading(false);
     }
   };
 
@@ -89,6 +105,7 @@ const Auth = () => {
         toast.error('Error al guardar el perfil', {
           description: error.message
         });
+        setLoading(false);
         return;
       }
 
@@ -98,15 +115,20 @@ const Auth = () => {
       toast.error('Error al guardar el perfil', {
         description: error.message
       });
-    } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
+  if (loading && authStep === AuthStep.LOADING) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-purple"></div>
+      <div className="min-h-screen bg-gradient-to-b from-white to-brand-purple/5 flex items-center justify-center p-4">
+        <div className="text-center bg-white p-8 rounded-lg shadow-md max-w-md w-full">
+          <Loader className="animate-spin h-12 w-12 text-brand-purple mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-700 mb-2">Verificando sesión...</h2>
+          <p className="text-gray-500">
+            Esto solo tomará un momento.
+          </p>
+        </div>
       </div>
     );
   }
@@ -130,6 +152,15 @@ const Auth = () => {
 
         {authStep === AuthStep.PROFILE_SETUP && session && (
           <BusinessProfileSetup onComplete={handleProfileComplete} />
+        )}
+
+        {loading && (
+          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-lg">
+              <Loader className="animate-spin h-8 w-8 text-brand-purple mx-auto mb-3" />
+              <p className="text-center text-gray-700">Guardando perfil...</p>
+            </div>
+          </div>
         )}
       </div>
     </div>
