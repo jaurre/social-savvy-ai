@@ -1,12 +1,15 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Welcome from '@/components/Welcome';
 import BusinessProfileForm, { BusinessProfile } from '@/components/BusinessProfileForm';
+import GuestProfileForm from '@/components/GuestProfileForm';
 import ContentGenerator from '@/components/ContentGenerator';
 import Dashboard from '@/components/Dashboard';
 import ContentPlanner from '@/components/ContentPlanner';
 import LearnModule from '@/components/learn/LearnModule';
 import Logo from '@/components/Logo';
+import GuestBanner from '@/components/GuestBanner';
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -14,14 +17,22 @@ import { toast } from 'sonner';
 enum AppState {
   WELCOME = 'welcome',
   PROFILE_SETUP = 'profile_setup',
+  GUEST_PROFILE_SETUP = 'guest_profile_setup',
   DASHBOARD = 'dashboard',
   CONTENT_GENERATOR = 'content_generator',
   CONTENT_PLANNER = 'content_planner',
   LEARN_MODULE = 'learn_module',
 }
 
+enum UserMode {
+  GUEST = 'guest',
+  REGISTERED = 'registered',
+  NONE = 'none'
+}
+
 const Index = () => {
   const [appState, setAppState] = useState<AppState>(AppState.WELCOME);
+  const [userMode, setUserMode] = useState<UserMode>(UserMode.NONE);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [postsRemaining, setPostsRemaining] = useState(3);
   const [postsCreated, setPostsCreated] = useState(0);
@@ -30,12 +41,33 @@ const Index = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Check if there's a guest profile in localStorage
+    const guestProfileData = localStorage.getItem('guestProfile');
+    const guestPostsCreated = localStorage.getItem('guestPostsCreated');
+    
+    if (guestProfileData) {
+      const guestProfile = JSON.parse(guestProfileData);
+      const postsCreated = guestPostsCreated ? parseInt(guestPostsCreated, 10) : 0;
+      
+      if (!session) {
+        setBusinessProfile(guestProfile);
+        setPostsCreated(postsCreated);
+        setPostsRemaining(Math.max(0, 3 - postsCreated));
+        setUserMode(UserMode.GUEST);
+        
+        if (appState === AppState.WELCOME) {
+          setAppState(AppState.DASHBOARD);
+        }
+      }
+    }
+
     // Check if there's an active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
         // Fetch business profile
         fetchBusinessProfile(session.user.id);
+        setUserMode(UserMode.REGISTERED);
       }
       setLoading(false);
     });
@@ -46,11 +78,15 @@ const Index = () => {
       if (session) {
         // Fetch business profile
         fetchBusinessProfile(session.user.id);
+        setUserMode(UserMode.REGISTERED);
       } else {
-        // If user logged out, reset state
-        setBusinessProfile(null);
-        if (appState !== AppState.WELCOME) {
-          setAppState(AppState.WELCOME);
+        // If user logged out and not in guest mode, reset state
+        if (userMode !== UserMode.GUEST) {
+          setBusinessProfile(null);
+          setUserMode(UserMode.NONE);
+          if (appState !== AppState.WELCOME) {
+            setAppState(AppState.WELCOME);
+          }
         }
       }
     });
@@ -86,9 +122,53 @@ const Index = () => {
         
         setBusinessProfile(profile);
         setAppState(AppState.DASHBOARD);
+        
+        // If transitioning from guest to registered user
+        if (userMode === UserMode.GUEST) {
+          migrateGuestData(userId);
+        }
+      } else {
+        // User logged in but no profile yet
+        setAppState(AppState.PROFILE_SETUP);
       }
     } catch (error) {
       console.error('Error fetching business profile:', error);
+    }
+  };
+
+  const migrateGuestData = async (userId: string) => {
+    // Only migrate if we already had guest data
+    const guestProfileData = localStorage.getItem('guestProfile');
+    if (!guestProfileData) return;
+    
+    try {
+      const guestProfile = JSON.parse(guestProfileData);
+      
+      // Create profile in database using guest data
+      const { error } = await supabase.from('business_profiles').insert({
+        id: userId,
+        name: guestProfile.name,
+        industry: guestProfile.industry,
+        description: guestProfile.description,
+        tone: guestProfile.tone,
+        visual_style: guestProfile.visualStyle,
+        color_palette: guestProfile.colorPalette,
+        slogan: guestProfile.slogan || null,
+        logo: guestProfile.logo || null
+      });
+
+      if (error) {
+        console.error('Error migrating guest profile:', error);
+        return;
+      }
+      
+      // Clean up local storage
+      localStorage.removeItem('guestProfile');
+      localStorage.removeItem('guestPostsCreated');
+      
+      toast.success('¡Tus datos de invitado se han guardado en tu cuenta!');
+    } catch (error) {
+      console.error('Error migrating guest data:', error);
     }
   };
 
@@ -104,6 +184,20 @@ const Index = () => {
       // User needs to authenticate
       navigate('/auth');
     }
+  };
+  
+  const handleGuestMode = () => {
+    const guestProfileData = localStorage.getItem('guestProfile');
+    
+    if (guestProfileData) {
+      // Ya tiene un perfil de invitado, ir al dashboard
+      setAppState(AppState.DASHBOARD);
+    } else {
+      // Necesita crear un perfil de invitado
+      setAppState(AppState.GUEST_PROFILE_SETUP);
+    }
+    
+    setUserMode(UserMode.GUEST);
   };
 
   const handleProfileComplete = async (profile: BusinessProfile) => {
@@ -145,23 +239,50 @@ const Index = () => {
       setLoading(false);
     }
   };
+  
+  const handleGuestProfileComplete = (profile: BusinessProfile) => {
+    setBusinessProfile(profile);
+    setAppState(AppState.DASHBOARD);
+  };
 
   const handleStartNewContent = () => {
     setAppState(AppState.CONTENT_GENERATOR);
   };
 
   const handleViewCalendar = () => {
+    // Verificar si es guest o no
+    if (userMode === UserMode.GUEST) {
+      toast.error('Funcionalidad limitada', {
+        description: 'El planificador solo está disponible para usuarios registrados.'
+      });
+      return;
+    }
+    
     setAppState(AppState.CONTENT_PLANNER);
   };
   
   const handleViewLearn = () => {
+    // Verificar si es guest o no
+    if (userMode === UserMode.GUEST) {
+      toast.error('Funcionalidad limitada', {
+        description: 'El módulo de aprendizaje solo está disponible para usuarios registrados.'
+      });
+      return;
+    }
+    
     setAppState(AppState.LEARN_MODULE);
   };
 
   const handleGenerateContent = () => {
     if (postsRemaining > 0) {
+      const newPostsCreated = postsCreated + 1;
       setPostsRemaining(prev => prev - 1);
-      setPostsCreated(prev => prev + 1);
+      setPostsCreated(newPostsCreated);
+      
+      // Si es invitado, guardar en localStorage
+      if (userMode === UserMode.GUEST) {
+        localStorage.setItem('guestPostsCreated', newPostsCreated.toString());
+      }
     }
   };
 
@@ -181,8 +302,18 @@ const Index = () => {
       }
       
       toast.success('Sesión cerrada con éxito');
-      setBusinessProfile(null);
-      setAppState(AppState.WELCOME);
+      
+      // Verificar si hay datos de invitado
+      const guestProfileData = localStorage.getItem('guestProfile');
+      
+      if (guestProfileData) {
+        // Mantener el modo invitado activo
+        setUserMode(UserMode.GUEST);
+      } else {
+        setBusinessProfile(null);
+        setUserMode(UserMode.NONE);
+        setAppState(AppState.WELCOME);
+      }
     } catch (error: any) {
       toast.error('Error al cerrar sesión', {
         description: error.message
@@ -198,7 +329,7 @@ const Index = () => {
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
           <Logo />
           
-          {appState !== AppState.PROFILE_SETUP && (
+          {appState !== AppState.PROFILE_SETUP && appState !== AppState.GUEST_PROFILE_SETUP && (
             <nav className="hidden md:flex space-x-1">
               <button 
                 onClick={() => setAppState(AppState.DASHBOARD)}
@@ -221,7 +352,7 @@ const Index = () => {
                 Crear Contenido
               </button>
               <button 
-                onClick={() => setAppState(AppState.CONTENT_PLANNER)}
+                onClick={handleViewCalendar}
                 className={`px-4 py-2 rounded-md transition-colors ${
                   appState === AppState.CONTENT_PLANNER 
                     ? 'bg-brand-purple/10 text-brand-purple font-medium' 
@@ -231,7 +362,7 @@ const Index = () => {
                 Planificador
               </button>
               <button 
-                onClick={() => setAppState(AppState.LEARN_MODULE)}
+                onClick={handleViewLearn}
                 className={`px-4 py-2 rounded-md transition-colors ${
                   appState === AppState.LEARN_MODULE 
                     ? 'bg-brand-purple/10 text-brand-purple font-medium' 
@@ -243,11 +374,16 @@ const Index = () => {
             </nav>
           )}
           
-          {appState !== AppState.PROFILE_SETUP && (
+          {appState !== AppState.PROFILE_SETUP && appState !== AppState.GUEST_PROFILE_SETUP && (
             <div className="flex items-center gap-3">
               <div className="text-sm hidden md:block">
                 <span className="text-gray-500">Publicaciones: </span>
                 <span className="font-medium">{postsRemaining}/3</span>
+                {userMode === UserMode.GUEST && (
+                  <span className="ml-2 bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-xs font-medium">
+                    Invitado
+                  </span>
+                )}
               </div>
               {session ? (
                 <button 
@@ -274,26 +410,45 @@ const Index = () => {
   const renderContent = () => {
     switch (appState) {
       case AppState.WELCOME:
-        return <Welcome onGetStarted={handleGetStarted} />;
+        return <Welcome onGetStarted={handleGetStarted} onGuestMode={handleGuestMode} />;
       case AppState.PROFILE_SETUP:
         return <BusinessProfileForm onComplete={handleProfileComplete} />;
+      case AppState.GUEST_PROFILE_SETUP:
+        return <GuestProfileForm 
+          onComplete={handleGuestProfileComplete} 
+          onRegisterInstead={handleSignIn} 
+        />;
       case AppState.DASHBOARD:
         return businessProfile ? (
-          <Dashboard 
-            businessProfile={businessProfile} 
-            postsCreated={postsCreated}
-            onStartNewContent={handleStartNewContent}
-            onViewCalendar={handleViewCalendar}
-            onViewLearn={handleViewLearn}
-          />
+          <>
+            {userMode === UserMode.GUEST && (
+              <div className="container mx-auto mb-6">
+                <GuestBanner postsRemaining={postsRemaining} onRegister={handleSignIn} />
+              </div>
+            )}
+            <Dashboard 
+              businessProfile={businessProfile} 
+              postsCreated={postsCreated}
+              onStartNewContent={handleStartNewContent}
+              onViewCalendar={handleViewCalendar}
+              onViewLearn={handleViewLearn}
+            />
+          </>
         ) : null;
       case AppState.CONTENT_GENERATOR:
         return businessProfile ? (
-          <ContentGenerator 
-            businessProfile={businessProfile}
-            postsRemaining={postsRemaining}
-            onGenerateContent={handleGenerateContent}
-          />
+          <>
+            {userMode === UserMode.GUEST && (
+              <div className="container mx-auto mb-6">
+                <GuestBanner postsRemaining={postsRemaining} onRegister={handleSignIn} />
+              </div>
+            )}
+            <ContentGenerator 
+              businessProfile={businessProfile}
+              postsRemaining={postsRemaining}
+              onGenerateContent={handleGenerateContent}
+            />
+          </>
         ) : null;
       case AppState.CONTENT_PLANNER:
         return businessProfile ? (
@@ -326,7 +481,7 @@ const Index = () => {
         {renderContent()}
       </main>
       
-      {appState !== AppState.WELCOME && appState !== AppState.PROFILE_SETUP && (
+      {appState !== AppState.WELCOME && appState !== AppState.PROFILE_SETUP && appState !== AppState.GUEST_PROFILE_SETUP && (
         <div className="fixed bottom-4 right-4 z-20">
           <button 
             className="bg-brand-purple text-white p-4 rounded-full shadow-lg hover:bg-brand-purple-dark transition-colors"
